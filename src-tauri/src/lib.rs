@@ -61,13 +61,21 @@ async fn create_session(
     device_serial: String,
     app_package: String,
     display_spec: Option<String>,
+    video_bit_rate: Option<u32>,
+    max_fps: Option<u32>,
 ) -> Result<session_manager::SessionInfo, DokkiError> {
-    log::info!("[cmd] create_session: device={}, app={}", device_serial, app_package);
+    let spec = display_spec.unwrap_or_else(|| "1920x1080".to_string());
+    let bitrate = video_bit_rate.unwrap_or(8_000_000);
+    let fps = max_fps.unwrap_or(60);
+    log::info!("[cmd] create_session: device={}, app={}, display={}, bitrate={}, fps={}",
+        device_serial, app_package, spec, bitrate, fps);
     let result = session_manager::create_session(
         &state,
         device_serial,
         app_package,
-        display_spec.unwrap_or_else(|| "1920x1080".to_string()),
+        spec,
+        bitrate,
+        fps,
     )
     .await;
     match &result {

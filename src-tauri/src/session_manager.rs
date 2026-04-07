@@ -60,10 +60,18 @@ pub async fn create_session(
     device_serial: String,
     app_package: String,
     display_spec: String,
+    video_bit_rate: u32,
+    max_fps: u32,
 ) -> Result<SessionInfo, DokkiError> {
     let id = Uuid::new_v4().to_string();
 
-    let conn = scrcpy_server::connect(&device_serial, &app_package, &display_spec).await?;
+    let conn = scrcpy_server::connect(
+        &device_serial,
+        &app_package,
+        &display_spec,
+        video_bit_rate,
+        max_fps,
+    ).await?;
 
     let info = SessionInfo {
         id: id.clone(),

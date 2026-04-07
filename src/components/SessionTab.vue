@@ -4,6 +4,7 @@ import type { SessionInfo } from "../types";
 defineProps<{
   session: SessionInfo;
   active: boolean;
+  icon?: string | null;
 }>();
 
 defineEmits<{
@@ -14,38 +15,45 @@ defineEmits<{
 
 <template>
   <div class="tab" :class="{ active }" @click="$emit('click')">
+    <img v-if="icon" :src="`data:image/png;base64,${icon}`" class="tab-icon" alt="" />
     <span class="tab-label">
       {{ session.app_package.split('.').pop() }}
     </span>
-    <span class="tab-device">{{ session.device_serial.slice(0, 8) }}</span>
     <button class="tab-close" @click.stop="$emit('close')" title="Fermer">&times;</button>
+    <div v-if="active" class="tab-indicator" />
   </div>
 </template>
 
 <style scoped>
 .tab {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  background: #16213e;
-  border-radius: 8px 8px 0 0;
+  gap: 6px;
+  height: var(--topbar-height);
+  padding: 0 14px;
+  background: transparent;
+  border-right: 1px solid var(--border);
   cursor: pointer;
-  min-width: 120px;
-  max-width: 220px;
   user-select: none;
-  border: 1px solid transparent;
-  border-bottom: none;
+  min-width: 80px;
+  max-width: 180px;
   transition: background 0.15s;
 }
 
 .tab:hover {
-  background: #1a2744;
+  background: var(--bg-hover);
 }
 
 .tab.active {
-  background: #0f3460;
-  border-color: #533483;
+  background: var(--bg-secondary);
+}
+
+.tab-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
 }
 
 .tab-label {
@@ -53,29 +61,45 @@ defineEmits<{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 500;
+  color: var(--text-secondary);
 }
 
-.tab-device {
-  font-size: 0.7rem;
-  color: #666;
-  font-family: monospace;
+.tab.active .tab-label {
+  color: #fff;
+  font-weight: 600;
 }
 
 .tab-close {
   background: none;
   border: none;
-  color: #666;
+  color: transparent;
   cursor: pointer;
-  font-size: 1.1rem;
-  padding: 0 0.2rem;
+  font-size: 1rem;
+  padding: 0 2px;
+  border-radius: var(--radius-sm);
   line-height: 1;
-  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.tab:hover .tab-close {
+  color: var(--text-muted);
 }
 
 .tab-close:hover {
-  color: #f44336;
+  color: var(--danger) !important;
   background: rgba(244, 67, 54, 0.15);
+}
+
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
 }
 </style>

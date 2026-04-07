@@ -3,10 +3,15 @@ import { ref } from "vue";
 import { useDevices } from "./composables/useDevices";
 import { useSessions } from "./composables/useSessions";
 import { useShortcuts } from "./composables/useShortcuts";
+import { useToast } from "./composables/useToast";
+import { useClones } from "./composables/useClones";
+import { useVideoPreset } from "./composables/useVideoPreset";
 import TabBar from "./components/TabBar.vue";
+import ActionSidebar from "./components/ActionSidebar.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
 import NewSessionDialog from "./components/NewSessionDialog.vue";
-import StatusBar from "./components/StatusBar.vue";
 import VideoPlayer from "./components/VideoPlayer.vue";
+import Toast from "./components/Toast.vue";
 
 const { devices, error: devicesError } = useDevices();
 const {
@@ -19,18 +24,26 @@ const {
   switchNext,
   switchPrev,
 } = useSessions();
+const { error: toastError, success: toastSuccess } = useToast();
+const { iconMap } = useClones(devices);
+const { preset, displaySpec } = useVideoPreset();
 
 const showNewSessionDialog = ref(false);
+const showSettings = ref(false);
 
 async function handleCreateSession(deviceSerial: string, appPackage: string) {
   try {
-    console.log("[app] Creating session:", deviceSerial, appPackage);
-    const session = await createSession(deviceSerial, appPackage);
-    console.log("[app] Session created:", session);
+    await createSession(
+      deviceSerial,
+      appPackage,
+      displaySpec.value,
+      preset.value.bitrate,
+      preset.value.fps,
+    );
     showNewSessionDialog.value = false;
+    toastSuccess("Session lancée");
   } catch (e) {
-    console.error("[app] Session creation failed:", e);
-    alert(`Erreur: ${e}`);
+    toastError(`Erreur: ${typeof e === "object" ? JSON.stringify(e) : e}`);
   }
 }
 
@@ -38,7 +51,7 @@ async function handleCloseSession(sessionId: string) {
   try {
     await stopSession(sessionId);
   } catch (e) {
-    alert(`Erreur: ${e}`);
+    toastError(`Erreur: ${e}`);
   }
 }
 
@@ -55,46 +68,45 @@ useShortcuts({
   switchNext,
   switchPrev,
 });
+
+// Clones are auto-loaded by useClones() when devices connect
 </script>
 
 <template>
   <div class="app-layout">
+    <!-- Topbar -->
     <TabBar
       :sessions="sessions"
       :active-session-id="activeSessionId"
+      :icon-map="iconMap"
       @select="switchTo"
       @close="handleCloseSession"
       @new-session="showNewSessionDialog = true"
     />
 
-    <main class="content">
-      <!-- No sessions yet -->
+    <!-- Game area -->
+    <main class="game">
       <div v-if="sessions.length === 0" class="empty-state">
+        <div class="empty-logo">D</div>
         <h1>Dokki</h1>
-        <p class="subtitle">Multi-Instance Android Desktop</p>
-
-        <div class="devices-info">
+        <p class="empty-sub">Multi-compte Dofus Touch</p>
+        <div class="empty-status">
           <p v-if="devicesError" class="error">{{ devicesError }}</p>
-          <p v-else-if="devices.length === 0" class="muted">
-            Aucun device détecté. Branchez un téléphone en USB.
-          </p>
-          <p v-else class="muted">
-            {{ devices.length }} device{{ devices.length !== 1 ? "s" : "" }}
-            connecté{{ devices.length !== 1 ? "s" : "" }}.
+          <p v-else-if="devices.length === 0">Branchez un téléphone en USB</p>
+          <p v-else>
+            {{ devices.length }} device{{ devices.length !== 1 ? "s" : "" }} connecté{{ devices.length !== 1 ? "s" : "" }}
           </p>
         </div>
-
         <button
-          class="btn-new"
+          class="btn-primary"
           :disabled="devices.length === 0"
           @click="showNewSessionDialog = true"
         >
-          + Nouvelle session
+          Nouvelle instance
         </button>
-        <p class="shortcut-hint">ou Ctrl+T</p>
+        <span class="empty-hint">Ctrl+T</span>
       </div>
 
-      <!-- All sessions: keep all VideoPlayers alive, show/hide -->
       <div
         v-for="session in sessions"
         :key="session.id"
@@ -109,7 +121,18 @@ useShortcuts({
       </div>
     </main>
 
-    <StatusBar :sessions="sessions" :active-session-id="activeSessionId" />
+    <!-- Sidebar -->
+    <ActionSidebar
+      @toggle-shortcuts="() => {}"
+      @toggle-settings="showSettings = !showSettings"
+    />
+
+    <!-- Overlays -->
+    <SettingsPanel
+      :visible="showSettings"
+      :devices="devices"
+      @close="showSettings = false"
+    />
 
     <NewSessionDialog
       :visible="showNewSessionDialog"
@@ -117,83 +140,31 @@ useShortcuts({
       @close="showNewSessionDialog = false"
       @create="handleCreateSession"
     />
+
+    <Toast />
   </div>
 </template>
 
 <style>
-* {
-  box-sizing: border-box;
-}
-
-:root {
-  font-family: Inter, system-ui, -apple-system, sans-serif;
-  color: #e0e0e0;
-  background-color: #1a1a2e;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-}
-
 .app-layout {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr var(--sidebar-width);
+  grid-template-rows: var(--topbar-height) 1fr;
   height: 100vh;
+  overflow: hidden;
 }
 
-.content {
-  flex: 1;
+/* Topbar spans full width */
+.app-layout > :first-child {
+  grid-column: 1 / -1;
+}
+
+.game {
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 0.5rem;
-}
-
-.empty-state {
-  text-align: center;
-}
-
-.empty-state h1 {
-  font-size: 2.5rem;
-  margin-bottom: 0.25rem;
-}
-
-.subtitle {
-  color: #888;
-  margin-top: 0;
-  margin-bottom: 2rem;
-}
-
-.devices-info {
-  margin-bottom: 1.5rem;
-}
-
-.btn-new {
-  background: #533483;
-  color: #fff;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-new:hover {
-  background: #6441a5;
-}
-
-.btn-new:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.shortcut-hint {
-  color: #555;
-  font-size: 0.8rem;
-  margin-top: 0.5rem;
+  background: #000;
 }
 
 .session-view {
@@ -204,11 +175,62 @@ body {
   justify-content: center;
 }
 
-.error {
-  color: #f44336;
+/* Empty state */
+.empty-state {
+  text-align: center;
+  color: var(--text-secondary);
 }
 
-.muted {
-  color: #666;
+.empty-logo {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  background: var(--accent);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #fff;
 }
+
+.empty-state h1 {
+  font-size: 1.5rem;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.empty-sub {
+  font-size: 0.85rem;
+  margin-bottom: 24px;
+}
+
+.empty-status {
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 10px 24px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.empty-hint {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.error { color: var(--danger); }
 </style>

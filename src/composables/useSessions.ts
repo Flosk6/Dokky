@@ -14,15 +14,19 @@ export function useSessions() {
   async function createSession(
     deviceSerial: string,
     appPackage: string,
-    displaySpec?: string
+    displaySpec?: string,
+    videoBitRate?: number,
+    maxFps?: number,
   ) {
-    if (creating.value) return; // prevent double calls
+    if (creating.value) return;
     creating.value = true;
     try {
       const session = await invoke<SessionInfo>("create_session", {
         deviceSerial,
         appPackage,
         displaySpec,
+        videoBitRate,
+        maxFps,
       });
       sessions.value.push(session);
       activeSessionId.value = session.id;

@@ -62,6 +62,8 @@ pub async fn connect(
     device_serial: &str,
     app_package: &str,
     display_spec: &str,
+    video_bit_rate: u32,
+    max_fps: u32,
 ) -> Result<ScrcpyConnection, DokkiError> {
     let server_jar = find_server_jar()?;
     let scid = (Uuid::new_v4().as_u128() as u32) & 0x7FFF_FFFF;
@@ -112,10 +114,10 @@ pub async fn connect(
          log_level=info \
          audio=false \
          video_codec=h264 \
-         max_fps=60 \
-         video_bit_rate=8000000 \
+         max_fps={} \
+         video_bit_rate={} \
          new_display={}",
-        SCRCPY_VERSION, scid, display_spec
+        SCRCPY_VERSION, scid, max_fps, video_bit_rate, display_spec
     );
     log::info!("[scrcpy] Starting server on device...");
 
