@@ -25,7 +25,7 @@ const {
   switchPrev,
 } = useSessions();
 const { error: toastError, success: toastSuccess } = useToast();
-const { iconMap } = useClones(devices);
+const { iconMap, nameMap } = useClones(devices);
 const { preset, displaySpec } = useVideoPreset();
 
 const showNewSessionDialog = ref(false);
@@ -42,6 +42,7 @@ async function handleCreateSession(deviceSerial: string, appPackage: string) {
       preset.value.fps,
     );
     showNewSessionDialog.value = false;
+    showShortcuts.value = false;
     toastSuccess("Session lancée");
   } catch (e) {
     toastError(`Erreur: ${typeof e === "object" ? JSON.stringify(e) : e}`);
@@ -80,6 +81,7 @@ useShortcuts({
       :sessions="sessions"
       :active-session-id="activeSessionId"
       :icon-map="iconMap"
+      :name-map="nameMap"
       @select="switchTo"
       @close="handleCloseSession"
       @new-session="showNewSessionDialog = true"
@@ -88,8 +90,8 @@ useShortcuts({
     <!-- Game area -->
     <main class="game" style="position: relative;">
       <div v-if="sessions.length === 0" class="empty-state">
-        <div class="empty-logo">D</div>
-        <h1>Dokki</h1>
+        <img src="./assets/dokky-logo.png" alt="Dokky" class="empty-logo" />
+        <h1>Dokky</h1>
         <p class="empty-sub">Multi-compte Dofus Touch</p>
         <div class="empty-status">
           <p v-if="devicesError" class="error">{{ devicesError }}</p>
@@ -185,17 +187,10 @@ useShortcuts({
 }
 
 .empty-logo {
-  width: 64px;
-  height: 64px;
+  width: 96px;
+  height: 96px;
   margin: 0 auto 16px;
-  background: var(--accent);
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  font-weight: 800;
-  color: #fff;
+  object-fit: contain;
 }
 
 .empty-state h1 {

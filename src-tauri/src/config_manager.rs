@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::DokkiError;
+use crate::error::DokkyError;
 
 /// A game action shortcut: press a key → tap in a zone.
 /// Position is randomized within the zone to simulate human-like taps.
@@ -28,6 +28,10 @@ fn default_zone_size() -> f64 {
     0.02
 }
 
+fn default_video_preset() -> String {
+    "high".to_string()
+}
+
 /// Navigation shortcuts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NavigationShortcuts {
@@ -48,11 +52,13 @@ impl Default for NavigationShortcuts {
     }
 }
 
-/// Full app configuration, persisted to ~/.dokki/config.json.
+/// Full app configuration, persisted to ~/.dokky/config.json.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub navigation: NavigationShortcuts,
     pub game_actions: Vec<GameAction>,
+    #[serde(default = "default_video_preset")]
+    pub video_preset: String,
 }
 
 impl Default for AppConfig {
@@ -60,6 +66,7 @@ impl Default for AppConfig {
         Self {
             navigation: NavigationShortcuts::default(),
             game_actions: Vec::new(),
+            video_preset: default_video_preset(),
         }
     }
 }
@@ -67,7 +74,7 @@ impl Default for AppConfig {
 fn config_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".dokki")
+        .join(".dokky")
         .join("config.json")
 }
 
@@ -80,16 +87,16 @@ pub fn load_config() -> AppConfig {
     }
 }
 
-pub fn save_config(config: &AppConfig) -> Result<(), DokkiError> {
+pub fn save_config(config: &AppConfig) -> Result<(), DokkyError> {
     let path = config_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| DokkiError::ApkCloneFailed(format!("create config dir: {}", e)))?;
+            .map_err(|e| DokkyError::ApkCloneFailed(format!("create config dir: {}", e)))?;
     }
     let data = serde_json::to_string_pretty(config)
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("serialize config: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("serialize config: {}", e)))?;
     std::fs::write(&path, data)
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("write config: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("write config: {}", e)))?;
     log::info!("[config] Saved to {:?}", path);
     Ok(())
 }

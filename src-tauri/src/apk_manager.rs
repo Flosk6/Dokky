@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use tokio::process::Command;
 
-use crate::error::DokkiError;
+use crate::error::DokkyError;
 
 const DOFUS_PACKAGE: &str = "com.ankama.dofustouch";
 
@@ -18,15 +18,15 @@ pub struct CloneInfo {
 
 /// List all Dofus Touch packages installed on a device.
 /// Reads the real app name from each APK in parallel.
-pub async fn list_dofus_clones(serial: &str) -> Result<Vec<CloneInfo>, DokkiError> {
+pub async fn list_dofus_clones(serial: &str) -> Result<Vec<CloneInfo>, DokkyError> {
     let output = Command::new("adb")
         .args(["-s", serial, "shell", "pm", "list", "packages"])
         .output()
         .await
-        .map_err(|_| DokkiError::AdbNotFound)?;
+        .map_err(|_| DokkyError::AdbNotFound)?;
 
     if !output.status.success() {
-        return Err(DokkiError::AdbCommandFailed(
+        return Err(DokkyError::AdbCommandFailed(
             String::from_utf8_lossy(&output.stderr).to_string(),
         ));
     }
@@ -79,14 +79,14 @@ pub async fn list_dofus_clones(serial: &str) -> Result<Vec<CloneInfo>, DokkiErro
 async fn read_app_info_from_device(
     serial: &str,
     package: &str,
-) -> Result<(String, Option<String>), DokkiError> {
-    let work_dir = std::env::temp_dir().join(format!("dokki_info_{}", package));
+) -> Result<(String, Option<String>), DokkyError> {
+    let work_dir = std::env::temp_dir().join(format!("dokky_info_{}", package));
     std::fs::create_dir_all(&work_dir).ok();
 
     let result = async {
         let paths = get_all_apk_paths(serial, package).await?;
         let base = paths.iter().find(|p| p.contains("base")).or(paths.first())
-            .ok_or_else(|| DokkiError::ApkCloneFailed("no APK".to_string()))?;
+            .ok_or_else(|| DokkyError::ApkCloneFailed("no APK".to_string()))?;
 
         let local = work_dir.join("base.apk");
         run_adb(serial, &["pull", base, local.to_str().unwrap()]).await?;
@@ -95,7 +95,7 @@ async fn read_app_info_from_device(
         let icon_b64 = extract_icon_from_apk(&local, &work_dir)
             .and_then(|path| {
                 let bytes = std::fs::read(&path)
-                    .map_err(|e| DokkiError::ApkCloneFailed(e.to_string()))?;
+                    .map_err(|e| DokkyError::ApkCloneFailed(e.to_string()))?;
                 use base64::Engine;
                 Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
             })
@@ -109,7 +109,7 @@ async fn read_app_info_from_device(
             "-f", "--no-src",
         ])
         .await
-        .map_err(|e| DokkiError::ApkCloneFailed(e))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(e))?;
 
         let mut name = package.to_string();
         let strings_path = dec.join("res/values/strings.xml");
@@ -146,7 +146,7 @@ pub async fn clone_dofus(
     clone_suffix: &str,
     display_name: &str,
     icon_color: Option<&str>,
-) -> Result<String, DokkiError> {
+) -> Result<String, DokkyError> {
     check_tools().await?;
 
     let new_package = format!("{}{}", DOFUS_PACKAGE, clone_suffix);
@@ -160,12 +160,12 @@ pub async fn clone_dofus(
         return Ok(new_package);
     }
 
-    let work_dir = std::env::temp_dir().join(format!("dokki_clone_{}", clone_suffix));
+    let work_dir = std::env::temp_dir().join(format!("dokky_clone_{}", clone_suffix));
     if work_dir.exists() {
         std::fs::remove_dir_all(&work_dir).ok();
     }
     std::fs::create_dir_all(&work_dir)
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("create work dir: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("create work dir: {}", e)))?;
 
     let result = do_clone(serial, &new_package, display_name, icon_color, &work_dir).await;
 
@@ -174,14 +174,14 @@ pub async fn clone_dofus(
 }
 
 /// Extract the Dofus Touch app icon as base64 PNG for display in the UI.
-pub async fn get_dofus_icon(serial: &str) -> Result<String, DokkiError> {
+pub async fn get_dofus_icon(serial: &str) -> Result<String, DokkyError> {
     let apk_paths = get_all_apk_paths(serial, DOFUS_PACKAGE).await?;
     let base_remote = apk_paths.iter()
         .find(|p| p.contains("base.apk"))
         .or(apk_paths.first())
-        .ok_or_else(|| DokkiError::ApkCloneFailed("no base APK found".to_string()))?;
+        .ok_or_else(|| DokkyError::ApkCloneFailed("no base APK found".to_string()))?;
 
-    let work_dir = std::env::temp_dir().join("dokki_icon");
+    let work_dir = std::env::temp_dir().join("dokky_icon");
     std::fs::create_dir_all(&work_dir).ok();
     let local_apk = work_dir.join("base.apk");
 
@@ -195,7 +195,7 @@ pub async fn get_dofus_icon(serial: &str) -> Result<String, DokkiError> {
 
     // Read as base64
     let icon_bytes = std::fs::read(&icon_path)
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("read icon: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("read icon: {}", e)))?;
 
     use base64::Engine;
     Ok(base64::engine::general_purpose::STANDARD.encode(&icon_bytes))
@@ -207,14 +207,14 @@ async fn do_clone(
     display_name: &str,
     icon_color: Option<&str>,
     work_dir: &Path,
-) -> Result<String, DokkiError> {
+) -> Result<String, DokkyError> {
     // 1. Get base APK path
     log::info!("[apk] Finding base APK on device...");
     let apk_paths = get_all_apk_paths(serial, DOFUS_PACKAGE).await?;
     let base_remote = apk_paths.iter()
         .find(|p| p.contains("base.apk"))
         .or(apk_paths.first())
-        .ok_or_else(|| DokkiError::ApkCloneFailed("no base APK found".to_string()))?
+        .ok_or_else(|| DokkyError::ApkCloneFailed("no base APK found".to_string()))?
         .clone();
 
     // 2. Pull only the base APK (splits won't be needed — we remove the split requirement)
@@ -231,13 +231,13 @@ async fn do_clone(
         "-f",
     ])
     .await
-    .map_err(|e| DokkiError::ApkCloneFailed(format!("apktool decompile: {}", e)))?;
+    .map_err(|e| DokkyError::ApkCloneFailed(format!("apktool decompile: {}", e)))?;
 
     // 4. Modify package name in manifest + resources
     log::info!("[apk] Modifying package name to {}...", new_package);
     let manifest_path = decompiled_dir.join("AndroidManifest.xml");
     let manifest = std::fs::read_to_string(&manifest_path)
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("read manifest: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("read manifest: {}", e)))?;
 
     // Only remove split attributes from manifest (DON'T replace package name here —
     // replace_in_files_recursive will handle ALL files including manifest in one pass)
@@ -261,7 +261,7 @@ async fn do_clone(
     modified = modified.replace("android:extractNativeLibs=\"false\"", "android:extractNativeLibs=\"true\"");
 
     std::fs::write(&manifest_path, &modified)
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("write manifest: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("write manifest: {}", e)))?;
 
     // Rename smali directories BEFORE doing text replacements
     let smali_dirs = ["smali", "smali_classes2", "smali_classes3"];
@@ -330,7 +330,7 @@ async fn do_clone(
         "-o", rebuilt_base.to_str().unwrap(),
     ])
     .await
-    .map_err(|e| DokkiError::ApkCloneFailed(format!("apktool recompile: {}", e)))?;
+    .map_err(|e| DokkyError::ApkCloneFailed(format!("apktool recompile: {}", e)))?;
 
     // 6. Zipalign + sign base APK
     let keystore = get_or_create_keystore()?;
@@ -354,14 +354,14 @@ async fn do_clone(
 }
 
 /// Remove a cloned Dofus package from the device.
-pub async fn remove_clone(serial: &str, package: &str) -> Result<(), DokkiError> {
+pub async fn remove_clone(serial: &str, package: &str) -> Result<(), DokkyError> {
     if package == DOFUS_PACKAGE {
-        return Err(DokkiError::ApkCloneFailed(
+        return Err(DokkyError::ApkCloneFailed(
             "cannot remove the original Dofus Touch package".to_string(),
         ));
     }
     if !package.starts_with(DOFUS_PACKAGE) {
-        return Err(DokkiError::ApkCloneFailed(
+        return Err(DokkyError::ApkCloneFailed(
             "can only remove Dofus Touch clones".to_string(),
         ));
     }
@@ -413,12 +413,12 @@ fn walkdir(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-async fn check_tools() -> Result<(), DokkiError> {
+async fn check_tools() -> Result<(), DokkyError> {
     for tool in ["apktool", "java"] {
         let check = Command::new("which").arg(tool).output().await;
         match check {
             Ok(out) if out.status.success() => {}
-            _ => return Err(DokkiError::ToolNotFound(tool.to_string())),
+            _ => return Err(DokkyError::ToolNotFound(tool.to_string())),
         }
     }
 
@@ -428,21 +428,21 @@ async fn check_tools() -> Result<(), DokkiError> {
         .map(|o| o.status.success()).unwrap_or(false);
 
     if !has_apksigner && !has_jarsigner {
-        return Err(DokkiError::ToolNotFound("apksigner or jarsigner".to_string()));
+        return Err(DokkyError::ToolNotFound("apksigner or jarsigner".to_string()));
     }
 
     Ok(())
 }
 
-async fn get_all_apk_paths(serial: &str, package: &str) -> Result<Vec<String>, DokkiError> {
+async fn get_all_apk_paths(serial: &str, package: &str) -> Result<Vec<String>, DokkyError> {
     let output = Command::new("adb")
         .args(["-s", serial, "shell", "pm", "path", package])
         .output()
         .await
-        .map_err(|_| DokkiError::AdbNotFound)?;
+        .map_err(|_| DokkyError::AdbNotFound)?;
 
     if !output.status.success() {
-        return Err(DokkiError::ApkCloneFailed(format!(
+        return Err(DokkyError::ApkCloneFailed(format!(
             "package '{}' not found on device", package
         )));
     }
@@ -453,7 +453,7 @@ async fn get_all_apk_paths(serial: &str, package: &str) -> Result<Vec<String>, D
         .collect();
 
     if paths.is_empty() {
-        return Err(DokkiError::ApkCloneFailed(format!(
+        return Err(DokkyError::ApkCloneFailed(format!(
             "no APK files found for {}", package
         )));
     }
@@ -461,7 +461,7 @@ async fn get_all_apk_paths(serial: &str, package: &str) -> Result<Vec<String>, D
     Ok(paths)
 }
 
-async fn run_adb(serial: &str, args: &[&str]) -> Result<String, DokkiError> {
+async fn run_adb(serial: &str, args: &[&str]) -> Result<String, DokkyError> {
     let mut cmd_args = vec!["-s", serial];
     cmd_args.extend_from_slice(args);
 
@@ -469,11 +469,11 @@ async fn run_adb(serial: &str, args: &[&str]) -> Result<String, DokkiError> {
         .args(&cmd_args)
         .output()
         .await
-        .map_err(|_| DokkiError::AdbNotFound)?;
+        .map_err(|_| DokkyError::AdbNotFound)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        return Err(DokkiError::AdbCommandFailed(stderr));
+        return Err(DokkyError::AdbCommandFailed(stderr));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -495,32 +495,32 @@ async fn run_cmd(program: &str, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-fn get_or_create_keystore() -> Result<PathBuf, DokkiError> {
-    let dokki_dir = dirs::home_dir()
+fn get_or_create_keystore() -> Result<PathBuf, DokkyError> {
+    let dokky_dir = dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".dokki");
-    std::fs::create_dir_all(&dokki_dir).ok();
+        .join(".dokky");
+    std::fs::create_dir_all(&dokky_dir).ok();
 
-    let keystore = dokki_dir.join("debug.keystore");
+    let keystore = dokky_dir.join("debug.keystore");
     if !keystore.exists() {
         log::info!("[apk] Generating debug keystore...");
         let status = std::process::Command::new("keytool")
             .args([
                 "-genkey", "-v",
                 "-keystore", keystore.to_str().unwrap(),
-                "-alias", "dokki",
+                "-alias", "dokky",
                 "-keyalg", "RSA",
                 "-keysize", "2048",
                 "-validity", "10000",
-                "-storepass", "dokki123",
-                "-keypass", "dokki123",
-                "-dname", "CN=Dokki,OU=Dokki,O=Dokki,L=Unknown,ST=Unknown,C=XX",
+                "-storepass", "dokky123",
+                "-keypass", "dokky123",
+                "-dname", "CN=Dokky,OU=Dokky,O=Dokky,L=Unknown,ST=Unknown,C=XX",
             ])
             .output()
-            .map_err(|e| DokkiError::ApkCloneFailed(format!("keytool: {}", e)))?;
+            .map_err(|e| DokkyError::ApkCloneFailed(format!("keytool: {}", e)))?;
 
         if !status.status.success() {
-            return Err(DokkiError::ApkCloneFailed("failed to generate debug keystore".to_string()));
+            return Err(DokkyError::ApkCloneFailed("failed to generate debug keystore".to_string()));
         }
     }
 
@@ -528,12 +528,12 @@ fn get_or_create_keystore() -> Result<PathBuf, DokkiError> {
 }
 
 /// Extract the highest-res launcher icon from an APK (zip).
-fn extract_icon_from_apk(apk_path: &Path, output_dir: &Path) -> Result<PathBuf, DokkiError> {
+fn extract_icon_from_apk(apk_path: &Path, output_dir: &Path) -> Result<PathBuf, DokkyError> {
     // APK is a zip — look for mipmap ic_launcher.png (prefer highest density)
     let file = std::fs::File::open(apk_path)
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("open apk: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("open apk: {}", e)))?;
     let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("read zip: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("read zip: {}", e)))?;
 
     // Search all possible icon paths (varies between original and recompiled APKs)
     let mut icon_candidates: Vec<String> = Vec::new();
@@ -548,14 +548,14 @@ fn extract_icon_from_apk(apk_path: &Path, output_dir: &Path) -> Result<PathBuf, 
         if let Ok(mut entry) = archive.by_name(candidate) {
             let output_path = output_dir.join("ic_launcher.png");
             let mut output_file = std::fs::File::create(&output_path)
-                .map_err(|e| DokkiError::ApkCloneFailed(format!("create icon file: {}", e)))?;
+                .map_err(|e| DokkyError::ApkCloneFailed(format!("create icon file: {}", e)))?;
             std::io::copy(&mut entry, &mut output_file)
-                .map_err(|e| DokkiError::ApkCloneFailed(format!("extract icon: {}", e)))?;
+                .map_err(|e| DokkyError::ApkCloneFailed(format!("extract icon: {}", e)))?;
             return Ok(output_path);
         }
     }
 
-    Err(DokkiError::ApkCloneFailed("no launcher icon found in APK".to_string()))
+    Err(DokkyError::ApkCloneFailed("no launcher icon found in APK".to_string()))
 }
 
 /// Parse a hex color string like "#FF5555" into (r, g, b).
@@ -613,7 +613,7 @@ fn tint_icons(decompiled_dir: &Path, color_hex: &str) {
 }
 
 /// Zipalign an APK (required before signing with apksigner).
-async fn zipalign(input: &Path, output: &Path) -> Result<(), DokkiError> {
+async fn zipalign(input: &Path, output: &Path) -> Result<(), DokkyError> {
     // Try zipalign if available, otherwise skip (apksigner works without it, just less optimal)
     let result = Command::new("zipalign")
         .args(["-p", "-f", "4", input.to_str().unwrap(), output.to_str().unwrap()])
@@ -626,22 +626,22 @@ async fn zipalign(input: &Path, output: &Path) -> Result<(), DokkiError> {
             // zipalign not available, just copy
             log::warn!("[apk] zipalign not found, skipping alignment");
             std::fs::copy(input, output)
-                .map_err(|e| DokkiError::ApkCloneFailed(format!("copy: {}", e)))?;
+                .map_err(|e| DokkyError::ApkCloneFailed(format!("copy: {}", e)))?;
             Ok(())
         }
     }
 }
 
 /// Sign an APK in-place using apksigner or jarsigner.
-async fn sign_apk(apk: &Path, keystore: &Path) -> Result<(), DokkiError> {
+async fn sign_apk(apk: &Path, keystore: &Path) -> Result<(), DokkyError> {
     // Try apksigner first
     let result = Command::new("apksigner")
         .args([
             "sign",
             "--ks", keystore.to_str().unwrap(),
-            "--ks-pass", "pass:dokki123",
-            "--key-pass", "pass:dokki123",
-            "--ks-key-alias", "dokki",
+            "--ks-pass", "pass:dokky123",
+            "--key-pass", "pass:dokky123",
+            "--ks-key-alias", "dokky",
             apk.to_str().unwrap(),
         ])
         .output()
@@ -659,17 +659,17 @@ async fn sign_apk(apk: &Path, keystore: &Path) -> Result<(), DokkiError> {
         .args([
             "-verbose", "-sigalg", "SHA256withRSA", "-digestalg", "SHA-256",
             "-keystore", keystore.to_str().unwrap(),
-            "-storepass", "dokki123",
-            "-keypass", "dokki123",
+            "-storepass", "dokky123",
+            "-keypass", "dokky123",
             apk.to_str().unwrap(),
-            "dokki",
+            "dokky",
         ])
         .output()
         .await
-        .map_err(|e| DokkiError::ApkCloneFailed(format!("jarsigner: {}", e)))?;
+        .map_err(|e| DokkyError::ApkCloneFailed(format!("jarsigner: {}", e)))?;
 
     if !jarsigner.status.success() {
-        return Err(DokkiError::ApkCloneFailed(format!(
+        return Err(DokkyError::ApkCloneFailed(format!(
             "signing failed: {}", String::from_utf8_lossy(&jarsigner.stderr)
         )));
     }

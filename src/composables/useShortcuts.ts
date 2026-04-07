@@ -19,6 +19,7 @@ const config = ref<AppConfig>({
     prev_tab: "Ctrl+Shift+Tab",
   },
   game_actions: [],
+  video_preset: "high",
 });
 
 const captureMode = ref(false);

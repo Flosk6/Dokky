@@ -35,7 +35,7 @@ const confirmDeletePkg = ref<string | null>(null);
 const COLOR_PRESETS = ["#5865F2", "#ED4245", "#57F287", "#FEE75C", "#EB459E", "#F47B67"];
 
 const { selectedPresetName: selectedPreset, select: selectPreset, VIDEO_PRESETS } = useVideoPreset();
-const { config: shortcutConfig, addGameAction, removeGameAction, startCapture, saveConfig } = useShortcuts();
+const { config: shortcutConfig, saveConfig } = useShortcuts();
 
 // Editable nav shortcut
 const editingNav = ref<string | null>(null);
@@ -57,7 +57,6 @@ function captureNavKey(key: string, e: KeyboardEvent) {
   }
   e.preventDefault();
 
-  // Build shortcut string
   const parts: string[] = [];
   if (e.ctrlKey || e.metaKey) parts.push("Ctrl");
   if (e.shiftKey) parts.push("Shift");
@@ -72,37 +71,6 @@ function captureNavKey(key: string, e: KeyboardEvent) {
     editingNav.value = null;
     toastSuccess(`Raccourci "${navLabels[key]}" → ${combo}`);
   }
-}
-
-// New action form
-const newActionKey = ref("");
-const newActionLabel = ref("");
-const waitingCapture = ref(false);
-const capturedCoords = ref<{ x: number; y: number } | null>(null);
-
-function handleAddAction() {
-  if (!newActionKey.value || !newActionLabel.value || !capturedCoords.value) return;
-  addGameAction({
-    key: newActionKey.value,
-    label: newActionLabel.value,
-    x: capturedCoords.value.x,
-    y: capturedCoords.value.y,
-    w: 0.03,
-    h: 0.03,
-  });
-  newActionKey.value = "";
-  newActionLabel.value = "";
-  capturedCoords.value = null;
-  toastSuccess("Raccourci ajouté");
-}
-
-function handleCapture() {
-  waitingCapture.value = true;
-  startCapture((x: number, y: number) => {
-    capturedCoords.value = { x, y };
-    waitingCapture.value = false;
-    toastSuccess(`Coordonnées: ${Math.round(x * 100)}%, ${Math.round(y * 100)}%`);
-  });
 }
 
 const connectedDevices = computed(() =>
@@ -304,54 +272,6 @@ function cloneDisplayName(pkg: string): string {
 
           <div class="divider" />
 
-          <div class="section-title">Raccourcis en jeu</div>
-
-          <!-- Existing actions -->
-          <div v-if="shortcutConfig.game_actions.length > 0" class="actions-list">
-            <div v-for="action in shortcutConfig.game_actions" :key="action.key" class="action-row">
-              <kbd class="action-key">{{ action.key }}</kbd>
-              <span class="action-label">{{ action.label }}</span>
-              <span class="action-coords">{{ Math.round(action.x * 100) }}%,{{ Math.round(action.y * 100) }}% ±{{ Math.round((action.w ?? 0.02) * 100) }}%</span>
-              <button class="btn-x" @click="removeGameAction(action.key)">×</button>
-            </div>
-          </div>
-          <div v-else class="empty">Aucun raccourci configuré</div>
-
-          <!-- Add new action -->
-          <div class="new-action-form">
-            <div class="form-row">
-              <input
-                v-model="newActionKey"
-                class="input small"
-                placeholder="Touche (ex: 1)"
-                maxlength="1"
-              />
-              <input
-                v-model="newActionLabel"
-                class="input"
-                placeholder="Label (ex: Sort 1)"
-              />
-            </div>
-            <div class="form-row">
-              <button
-                class="btn-sm"
-                :class="{ accent: !capturedCoords && !waitingCapture }"
-                @click="handleCapture"
-              >
-                {{ waitingCapture ? '⟳ Cliquez sur le jeu...' : capturedCoords ? `✓ ${Math.round(capturedCoords.x * 100)}%, ${Math.round(capturedCoords.y * 100)}%` : '⊕ Capturer position' }}
-              </button>
-              <button
-                class="btn-sm accent"
-                :disabled="!newActionKey || !newActionLabel || !capturedCoords"
-                @click="handleAddAction"
-              >
-                Ajouter
-              </button>
-            </div>
-          </div>
-
-          <div class="divider" />
-
           <div class="section-title">Navigation</div>
           <div
             v-for="(navKey, navId) in shortcutConfig.navigation"
@@ -377,7 +297,7 @@ function cloneDisplayName(pkg: string): string {
 
           <div class="section-title">À propos</div>
           <div class="setting-row">
-            <span class="setting-label">Dokki</span>
+            <span class="setting-label">Dokky</span>
             <span class="setting-value">v0.1.0</span>
           </div>
           <div class="setting-row">
@@ -673,11 +593,7 @@ function cloneDisplayName(pkg: string): string {
 .setting-label { font-size: 0.82rem; color: var(--text-secondary); }
 .setting-value { font-size: 0.8rem; color: var(--text-primary); font-family: monospace; }
 
-/* Game actions */
-.actions-list {
-  margin-bottom: 10px;
-}
-
+/* Navigation shortcuts */
 .action-row {
   display: flex;
   align-items: center;
@@ -745,30 +661,6 @@ function cloneDisplayName(pkg: string): string {
 @keyframes pulse-border {
   0%, 100% { border-color: var(--accent); }
   50% { border-color: var(--accent-hover); }
-}
-
-.action-coords {
-  font-size: 0.65rem;
-  font-family: monospace;
-  color: var(--text-muted);
-}
-
-.new-action-form {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-row {
-  display: flex;
-  gap: 6px;
-}
-
-.input.small {
-  width: 60px;
-  flex-shrink: 0;
-  text-align: center;
 }
 
 /* Video presets */

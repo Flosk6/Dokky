@@ -1,4 +1,5 @@
-import { ref, computed } from "vue";
+import { computed } from "vue";
+import { useShortcuts } from "./useShortcuts";
 
 export interface VideoPreset {
   name: string;
@@ -16,20 +17,22 @@ export const VIDEO_PRESETS: VideoPreset[] = [
   { name: "low", resolution: "960x540", dpi: 120, fps: 30, bitrate: 2_000_000, label: "Low" },
 ];
 
-const selectedPresetName = ref("high");
-
 export function useVideoPreset() {
+  const { config, saveConfig } = useShortcuts();
+
+  const selectedPresetName = computed(() => config.value.video_preset ?? "high");
+
   const preset = computed(() =>
     VIDEO_PRESETS.find((p) => p.name === selectedPresetName.value) ?? VIDEO_PRESETS[1]
   );
 
-  /** Display spec for scrcpy: WxH/DPI */
   const displaySpec = computed(() =>
     `${preset.value.resolution}/${preset.value.dpi}`
   );
 
   function select(name: string) {
-    selectedPresetName.value = name;
+    config.value.video_preset = name;
+    saveConfig();
   }
 
   return { preset, displaySpec, selectedPresetName, select, VIDEO_PRESETS };

@@ -5,6 +5,7 @@ defineProps<{
   session: SessionInfo;
   active: boolean;
   icon?: string | null;
+  displayName?: string | null;
 }>();
 
 defineEmits<{
@@ -17,7 +18,7 @@ defineEmits<{
   <div class="tab" :class="{ active }" @click="$emit('click')">
     <img v-if="icon" :src="`data:image/png;base64,${icon}`" class="tab-icon" alt="" />
     <span class="tab-label">
-      {{ session.app_package.split('.').pop() }}
+      {{ displayName || session.app_package.split('.').pop() }}
     </span>
     <button class="tab-close" @click.stop="$emit('close')" title="Fermer">&times;</button>
     <div v-if="active" class="tab-indicator" />

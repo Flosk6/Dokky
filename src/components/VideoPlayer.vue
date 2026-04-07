@@ -161,6 +161,72 @@ function onMouseMove(e: MouseEvent) {
   }
 }
 
+// --- Keyboard handling ---
+// Map browser key names to Android keycodes
+const KEY_MAP: Record<string, number> = {
+  Enter: 66,
+  Backspace: 67,
+  Delete: 112,
+  Tab: 61,
+  Escape: 111,
+  ArrowUp: 19,
+  ArrowDown: 20,
+  ArrowLeft: 21,
+  ArrowRight: 22,
+  Home: 122,
+  End: 123,
+};
+
+function getMetaState(e: KeyboardEvent): number {
+  let meta = 0;
+  if (e.shiftKey) meta |= 0x1;
+  if (e.altKey) meta |= 0x2;
+  if (e.ctrlKey || e.metaKey) meta |= 0x1000;
+  return meta;
+}
+
+function onKeyDown(e: KeyboardEvent) {
+  if (captureMode.value) return;
+  // Don't intercept browser/app shortcuts
+  if (e.ctrlKey || e.metaKey) return;
+
+  const keycode = KEY_MAP[e.key];
+  if (keycode) {
+    e.preventDefault();
+    invoke("send_key", {
+      sessionId: props.sessionId,
+      action: 0, // ACTION_DOWN
+      keycode,
+      repeat: 0,
+      metastate: getMetaState(e),
+    }).catch(() => {});
+  } else if (e.key.length === 1) {
+    // Printable character → inject as text
+    e.preventDefault();
+    invoke("send_text", {
+      sessionId: props.sessionId,
+      text: e.key,
+    }).catch(() => {});
+  }
+}
+
+function onKeyUp(e: KeyboardEvent) {
+  if (captureMode.value) return;
+  if (e.ctrlKey || e.metaKey) return;
+
+  const keycode = KEY_MAP[e.key];
+  if (keycode) {
+    e.preventDefault();
+    invoke("send_key", {
+      sessionId: props.sessionId,
+      action: 1, // ACTION_UP
+      keycode,
+      repeat: 0,
+      metastate: getMetaState(e),
+    }).catch(() => {});
+  }
+}
+
 // --- Video decoder setup ---
 function setupDecoder() {
   const canvas = canvasRef.value;
@@ -288,9 +354,12 @@ onUnmounted(() => {
         :width="width"
         :height="height"
         class="video-canvas"
+        tabindex="0"
         @mousedown="onMouseDown"
         @mouseup="onMouseUp"
         @mousemove="onMouseMove"
+        @keydown="onKeyDown"
+        @keyup="onKeyUp"
         @contextmenu.prevent
       />
       <ShortcutOverlay

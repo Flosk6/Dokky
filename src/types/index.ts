@@ -41,6 +41,7 @@ export interface NavigationShortcuts {
 export interface AppConfig {
   navigation: NavigationShortcuts;
   game_actions: GameAction[];
+  video_preset: string;
 }
 
 export type SessionStatus =

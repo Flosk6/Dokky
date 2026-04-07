@@ -7,7 +7,7 @@ use tokio::process::Child;
 use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
-use crate::error::DokkiError;
+use crate::error::DokkyError;
 use crate::scrcpy_server;
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,7 +62,7 @@ pub async fn create_session(
     display_spec: String,
     video_bit_rate: u32,
     max_fps: u32,
-) -> Result<SessionInfo, DokkiError> {
+) -> Result<SessionInfo, DokkyError> {
     let id = Uuid::new_v4().to_string();
 
     let conn = scrcpy_server::connect(
@@ -102,33 +102,33 @@ pub async fn create_session(
 pub fn take_video_stream(
     store: &SessionStore,
     session_id: &str,
-) -> Result<TcpStream, DokkiError> {
+) -> Result<TcpStream, DokkyError> {
     let mut sessions = store.sessions.lock().unwrap();
     let entry = sessions
         .get_mut(session_id)
-        .ok_or_else(|| DokkiError::SessionNotFound(session_id.to_string()))?;
+        .ok_or_else(|| DokkyError::SessionNotFound(session_id.to_string()))?;
     let conn = entry
         .connection
         .as_mut()
-        .ok_or_else(|| DokkiError::SessionNotFound(session_id.to_string()))?;
+        .ok_or_else(|| DokkyError::SessionNotFound(session_id.to_string()))?;
     conn.video_stream
         .take()
-        .ok_or_else(|| DokkiError::ScrcpyLaunchFailed("video stream already taken".to_string()))
+        .ok_or_else(|| DokkyError::ScrcpyLaunchFailed("video stream already taken".to_string()))
 }
 
 /// Get a clone of the control stream Arc for a session.
 pub fn get_control(
     store: &SessionStore,
     session_id: &str,
-) -> Result<Arc<AsyncMutex<TcpStream>>, DokkiError> {
+) -> Result<Arc<AsyncMutex<TcpStream>>, DokkyError> {
     let sessions = store.sessions.lock().unwrap();
     let entry = sessions
         .get(session_id)
-        .ok_or_else(|| DokkiError::SessionNotFound(session_id.to_string()))?;
+        .ok_or_else(|| DokkyError::SessionNotFound(session_id.to_string()))?;
     let conn = entry
         .connection
         .as_ref()
-        .ok_or_else(|| DokkiError::SessionNotFound(session_id.to_string()))?;
+        .ok_or_else(|| DokkyError::SessionNotFound(session_id.to_string()))?;
     Ok(conn.control.clone())
 }
 
@@ -144,12 +144,12 @@ pub fn list_sessions(store: &SessionStore) -> Vec<SessionInfo> {
 }
 
 /// Stop a session: kill server process and clean up.
-pub async fn stop_session(store: &SessionStore, session_id: &str) -> Result<(), DokkiError> {
+pub async fn stop_session(store: &SessionStore, session_id: &str) -> Result<(), DokkyError> {
     let connection = {
         let mut sessions = store.sessions.lock().unwrap();
         let entry = sessions
             .get_mut(session_id)
-            .ok_or_else(|| DokkiError::SessionNotFound(session_id.to_string()))?;
+            .ok_or_else(|| DokkyError::SessionNotFound(session_id.to_string()))?;
         entry.info.status = SessionStatus::Stopped;
         entry.connection.take()
     };

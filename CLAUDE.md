@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Dokki** is a desktop application **dedicated exclusively to Dofus Touch** multi-accounting. It detects USB-connected Android devices, clones the Dofus Touch APK for independent accounts, opens multiple game instances on virtual displays (`--new-display`), and presents each instance as a tab (Chrome-style) with embedded video rendering and touch control.
+**Dokky** is a desktop application **dedicated exclusively to Dofus Touch** multi-accounting. It detects USB-connected Android devices, clones the Dofus Touch APK for independent accounts, opens multiple game instances on virtual displays (`--new-display`), and presents each instance as a tab (Chrome-style) with embedded video rendering and touch control.
 
 **Important**: This app is NOT a generic Android mirroring tool. Every feature, UI decision, and optimization is focused on the Dofus Touch gaming experience.
 
@@ -44,7 +44,7 @@ cargo tauri build
 | `device_manager.rs`   | `adb devices -l` parsing, `list_devices()` async function       |
 | `session_manager.rs`  | Session lifecycle, scrcpy connection ownership, video/control stream management |
 | `scrcpy_server.rs`    | Direct scrcpy-server protocol: push jar, start server, TCP handshake, video packet reading, touch event sending |
-| `error.rs`            | `DokkiError` enum — serializable error type for Tauri IPC       |
+| `error.rs`            | `DokkyError` enum — serializable error type for Tauri IPC       |
 
 ### scrcpy-server Protocol (`scrcpy_server.rs`)
 

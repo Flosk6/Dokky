@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
-pub enum DokkiError {
+pub enum DokkyError {
     AdbNotFound,
     AdbCommandFailed(String),
     ScrcpyNotFound,
@@ -11,16 +11,16 @@ pub enum DokkiError {
     ToolNotFound(String),
 }
 
-impl std::fmt::Display for DokkiError {
+impl std::fmt::Display for DokkyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DokkiError::AdbNotFound => write!(f, "adb not found in PATH"),
-            DokkiError::AdbCommandFailed(msg) => write!(f, "adb command failed: {}", msg),
-            DokkiError::ScrcpyNotFound => write!(f, "scrcpy not found in PATH"),
-            DokkiError::ScrcpyLaunchFailed(msg) => write!(f, "scrcpy launch failed: {}", msg),
-            DokkiError::SessionNotFound(id) => write!(f, "session not found: {}", id),
-            DokkiError::ApkCloneFailed(msg) => write!(f, "APK clone failed: {}", msg),
-            DokkiError::ToolNotFound(tool) => write!(f, "{} not found in PATH", tool),
+            DokkyError::AdbNotFound => write!(f, "adb not found in PATH"),
+            DokkyError::AdbCommandFailed(msg) => write!(f, "adb command failed: {}", msg),
+            DokkyError::ScrcpyNotFound => write!(f, "scrcpy not found in PATH"),
+            DokkyError::ScrcpyLaunchFailed(msg) => write!(f, "scrcpy launch failed: {}", msg),
+            DokkyError::SessionNotFound(id) => write!(f, "session not found: {}", id),
+            DokkyError::ApkCloneFailed(msg) => write!(f, "APK clone failed: {}", msg),
+            DokkyError::ToolNotFound(tool) => write!(f, "{} not found in PATH", tool),
         }
     }
 }

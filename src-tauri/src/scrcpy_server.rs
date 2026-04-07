@@ -9,7 +9,7 @@ use tokio::time::{sleep, timeout, Duration};
 
 use uuid::Uuid;
 
-use crate::error::DokkiError;
+use crate::error::DokkyError;
 
 const SCRCPY_VERSION: &str = "3.3.4";
 const DEVICE_NAME_LEN: usize = 64;
@@ -32,7 +32,7 @@ pub struct VideoPacket {
     pub data: Vec<u8>,
 }
 
-pub fn find_server_jar() -> Result<PathBuf, DokkiError> {
+pub fn find_server_jar() -> Result<PathBuf, DokkyError> {
     let candidates = [
         PathBuf::from("/opt/homebrew/share/scrcpy/scrcpy-server"),
         PathBuf::from(format!(
@@ -50,7 +50,7 @@ pub fn find_server_jar() -> Result<PathBuf, DokkiError> {
         }
     }
 
-    Err(DokkiError::ScrcpyNotFound)
+    Err(DokkyError::ScrcpyNotFound)
 }
 
 /// Start scrcpy-server on a device and connect using REVERSE tunnel
@@ -64,7 +64,7 @@ pub async fn connect(
     display_spec: &str,
     video_bit_rate: u32,
     max_fps: u32,
-) -> Result<ScrcpyConnection, DokkiError> {
+) -> Result<ScrcpyConnection, DokkyError> {
     let server_jar = find_server_jar()?;
     let scid = (Uuid::new_v4().as_u128() as u32) & 0x7FFF_FFFF;
 
@@ -75,19 +75,19 @@ pub async fn connect(
             server_jar.to_str().unwrap(),
             "/data/local/tmp/scrcpy-server.jar"])
         .output().await
-        .map_err(|_| DokkiError::AdbNotFound)?;
+        .map_err(|_| DokkyError::AdbNotFound)?;
 
     if !push.status.success() {
         let err = String::from_utf8_lossy(&push.stderr).to_string();
         log::error!("[scrcpy] Push failed: {}", err);
-        return Err(DokkiError::AdbCommandFailed(err));
+        return Err(DokkyError::AdbCommandFailed(err));
     }
     log::info!("[scrcpy] Push OK");
 
     // 2. Bind a local TCP port (PC listens, device will connect to it)
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("bind listener: {}", e)))?;
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("bind listener: {}", e)))?;
     let local_port = listener.local_addr().unwrap().port();
     log::info!("[scrcpy] Listening on port {}", local_port);
 
@@ -97,12 +97,12 @@ pub async fn connect(
             &format!("localabstract:scrcpy_{:08x}", scid),
             &format!("tcp:{}", local_port)])
         .output().await
-        .map_err(|_| DokkiError::AdbNotFound)?;
+        .map_err(|_| DokkyError::AdbNotFound)?;
 
     if !reverse.status.success() {
         let err = String::from_utf8_lossy(&reverse.stderr).to_string();
         log::error!("[scrcpy] Reverse tunnel failed: {}", err);
-        return Err(DokkiError::AdbCommandFailed(err));
+        return Err(DokkyError::AdbCommandFailed(err));
     }
     log::info!("[scrcpy] Reverse tunnel set up: scrcpy_{:08x} -> tcp:{}", scid, local_port);
 
@@ -127,7 +127,7 @@ pub async fn connect(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(e.to_string()))?;
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(e.to_string()))?;
 
     // Log server output in background
     if let Some(stdout) = server_process.stdout.take() {
@@ -153,8 +153,8 @@ pub async fn connect(
     log::info!("[scrcpy] Waiting for video connection from device...");
     let (mut video_stream, _) = timeout(Duration::from_secs(10), listener.accept())
         .await
-        .map_err(|_| DokkiError::ScrcpyLaunchFailed("timeout waiting for video connection".to_string()))?
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("accept video: {}", e)))?;
+        .map_err(|_| DokkyError::ScrcpyLaunchFailed("timeout waiting for video connection".to_string()))?
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("accept video: {}", e)))?;
     log::info!("[scrcpy] Video socket connected!");
 
     // 6. Read video handshake: device_name(64) + codec_id(4) + width(4) + height(4)
@@ -162,16 +162,16 @@ pub async fn connect(
     let mut name_buf = [0u8; DEVICE_NAME_LEN];
     timeout(Duration::from_secs(5), video_stream.read_exact(&mut name_buf))
         .await
-        .map_err(|_| DokkiError::ScrcpyLaunchFailed("timeout reading device name".to_string()))?
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("device name: {}", e)))?;
+        .map_err(|_| DokkyError::ScrcpyLaunchFailed("timeout reading device name".to_string()))?
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("device name: {}", e)))?;
     let device_name = String::from_utf8_lossy(&name_buf).trim_end_matches('\0').to_string();
     log::info!("[scrcpy] Device name: '{}'", device_name);
 
     let mut meta = [0u8; 12];
     timeout(Duration::from_secs(5), video_stream.read_exact(&mut meta))
         .await
-        .map_err(|_| DokkiError::ScrcpyLaunchFailed("timeout reading codec metadata".to_string()))?
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("codec metadata: {}", e)))?;
+        .map_err(|_| DokkyError::ScrcpyLaunchFailed("timeout reading codec metadata".to_string()))?
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("codec metadata: {}", e)))?;
 
     let codec_id = u32::from_be_bytes([meta[0], meta[1], meta[2], meta[3]]);
     let width = u32::from_be_bytes([meta[4], meta[5], meta[6], meta[7]]);
@@ -182,8 +182,8 @@ pub async fn connect(
     log::info!("[scrcpy] Waiting for control connection...");
     let (control_stream, _) = timeout(Duration::from_secs(5), listener.accept())
         .await
-        .map_err(|_| DokkiError::ScrcpyLaunchFailed("timeout waiting for control connection".to_string()))?
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("accept control: {}", e)))?;
+        .map_err(|_| DokkyError::ScrcpyLaunchFailed("timeout waiting for control connection".to_string()))?
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("accept control: {}", e)))?;
     log::info!("[scrcpy] Control socket connected!");
 
     // 8. Launch the app on the virtual display via scrcpy START_APP
@@ -211,10 +211,10 @@ pub async fn connect(
 }
 
 /// Read one video packet from the stream.
-pub async fn read_video_packet(stream: &mut TcpStream) -> Result<VideoPacket, DokkiError> {
+pub async fn read_video_packet(stream: &mut TcpStream) -> Result<VideoPacket, DokkyError> {
     let mut header = [0u8; 12];
     stream.read_exact(&mut header).await
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("video header: {}", e)))?;
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("video header: {}", e)))?;
 
     let raw = u64::from_be_bytes([
         header[0], header[1], header[2], header[3],
@@ -228,7 +228,7 @@ pub async fn read_video_packet(stream: &mut TcpStream) -> Result<VideoPacket, Do
 
     let mut data = vec![0u8; packet_size as usize];
     stream.read_exact(&mut data).await
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("video data: {}", e)))?;
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("video data: {}", e)))?;
 
     Ok(VideoPacket { is_config, is_keyframe, pts_us, data })
 }
@@ -238,10 +238,10 @@ pub async fn read_video_packet(stream: &mut TcpStream) -> Result<VideoPacket, Do
 pub async fn send_start_app(
     control: &Arc<AsyncMutex<TcpStream>>,
     app_package: &str,
-) -> Result<(), DokkiError> {
+) -> Result<(), DokkyError> {
     let name_bytes = app_package.as_bytes();
     if name_bytes.len() > 255 {
-        return Err(DokkiError::ScrcpyLaunchFailed("app package name too long".to_string()));
+        return Err(DokkyError::ScrcpyLaunchFailed("app package name too long".to_string()));
     }
 
     let mut msg = Vec::with_capacity(2 + name_bytes.len());
@@ -251,7 +251,7 @@ pub async fn send_start_app(
 
     let mut stream = control.lock().await;
     stream.write_all(&msg).await
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("send start_app: {}", e)))?;
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("send start_app: {}", e)))?;
 
     log::info!("[scrcpy] START_APP sent ({} bytes)", msg.len());
     Ok(())
@@ -265,7 +265,7 @@ pub async fn send_touch(
     y: i32,
     screen_width: u16,
     screen_height: u16,
-) -> Result<(), DokkiError> {
+) -> Result<(), DokkyError> {
     let mut msg = [0u8; 32];
     msg[0] = 0x02; // INJECT_TOUCH_EVENT
     msg[1] = action;
@@ -282,7 +282,49 @@ pub async fn send_touch(
 
     let mut stream = control.lock().await;
     stream.write_all(&msg).await
-        .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("send touch: {}", e)))?;
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("send touch: {}", e)))?;
+
+    Ok(())
+}
+
+/// Send an INJECT_KEYCODE control message (type 0x00).
+/// Format: [type:1][action:1][keycode:4BE][repeat:4BE][metastate:4BE] = 14 bytes
+pub async fn send_key(
+    control: &Arc<AsyncMutex<TcpStream>>,
+    action: u8,
+    keycode: u32,
+    repeat: u32,
+    metastate: u32,
+) -> Result<(), DokkyError> {
+    let mut msg = [0u8; 14];
+    msg[0] = 0x00; // INJECT_KEYCODE
+    msg[1] = action;
+    msg[2..6].copy_from_slice(&keycode.to_be_bytes());
+    msg[6..10].copy_from_slice(&repeat.to_be_bytes());
+    msg[10..14].copy_from_slice(&metastate.to_be_bytes());
+
+    let mut stream = control.lock().await;
+    stream.write_all(&msg).await
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("send key: {}", e)))?;
+
+    Ok(())
+}
+
+/// Send an INJECT_TEXT control message (type 0x01).
+/// Format: [type:1][length:4BE][text:variable UTF-8]
+pub async fn send_text(
+    control: &Arc<AsyncMutex<TcpStream>>,
+    text: &str,
+) -> Result<(), DokkyError> {
+    let text_bytes = text.as_bytes();
+    let mut msg = Vec::with_capacity(5 + text_bytes.len());
+    msg.push(0x01); // INJECT_TEXT
+    msg.extend_from_slice(&(text_bytes.len() as u32).to_be_bytes());
+    msg.extend_from_slice(text_bytes);
+
+    let mut stream = control.lock().await;
+    stream.write_all(&msg).await
+        .map_err(|e| DokkyError::ScrcpyLaunchFailed(format!("send text: {}", e)))?;
 
     Ok(())
 }

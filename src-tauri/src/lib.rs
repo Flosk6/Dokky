@@ -10,21 +10,21 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::Manager;
 
-use error::DokkiError;
+use error::DokkyError;
 use session_manager::SessionStore;
 
 #[tauri::command]
-async fn get_devices() -> Result<Vec<device_manager::Device>, DokkiError> {
+async fn get_devices() -> Result<Vec<device_manager::Device>, DokkyError> {
     device_manager::list_devices().await
 }
 
 #[tauri::command]
-async fn get_packages(device_serial: String, filter: String) -> Result<Vec<String>, DokkiError> {
+async fn get_packages(device_serial: String, filter: String) -> Result<Vec<String>, DokkyError> {
     device_manager::list_packages(&device_serial, &filter).await
 }
 
 #[tauri::command]
-async fn get_dofus_clones(device_serial: String) -> Result<Vec<apk_manager::CloneInfo>, DokkiError> {
+async fn get_dofus_clones(device_serial: String) -> Result<Vec<apk_manager::CloneInfo>, DokkyError> {
     apk_manager::list_dofus_clones(&device_serial).await
 }
 
@@ -34,7 +34,7 @@ async fn clone_dofus(
     clone_suffix: String,
     display_name: String,
     icon_color: Option<String>,
-) -> Result<String, DokkiError> {
+) -> Result<String, DokkyError> {
     log::info!("[cmd] clone_dofus: device={}, suffix={}, name={}, color={:?}",
         device_serial, clone_suffix, display_name, icon_color);
     apk_manager::clone_dofus(
@@ -46,12 +46,12 @@ async fn clone_dofus(
 }
 
 #[tauri::command]
-async fn get_dofus_icon(device_serial: String) -> Result<String, DokkiError> {
+async fn get_dofus_icon(device_serial: String) -> Result<String, DokkyError> {
     apk_manager::get_dofus_icon(&device_serial).await
 }
 
 #[tauri::command]
-async fn remove_dofus_clone(device_serial: String, package: String) -> Result<(), DokkiError> {
+async fn remove_dofus_clone(device_serial: String, package: String) -> Result<(), DokkyError> {
     log::info!("[cmd] remove_dofus_clone: {}", package);
     apk_manager::remove_clone(&device_serial, &package).await
 }
@@ -62,7 +62,7 @@ fn get_config() -> config_manager::AppConfig {
 }
 
 #[tauri::command]
-fn set_config(config: config_manager::AppConfig) -> Result<(), DokkiError> {
+fn set_config(config: config_manager::AppConfig) -> Result<(), DokkyError> {
     config_manager::save_config(&config)
 }
 
@@ -75,7 +75,7 @@ async fn create_session(
     display_spec: Option<String>,
     video_bit_rate: Option<u32>,
     max_fps: Option<u32>,
-) -> Result<session_manager::SessionInfo, DokkiError> {
+) -> Result<session_manager::SessionInfo, DokkyError> {
     let spec = display_spec.unwrap_or_else(|| "1920x1080".to_string());
     let bitrate = video_bit_rate.unwrap_or(8_000_000);
     let fps = max_fps.unwrap_or(60);
@@ -106,7 +106,7 @@ fn list_sessions(state: tauri::State<'_, SessionStore>) -> Vec<session_manager::
 async fn stop_session(
     state: tauri::State<'_, SessionStore>,
     session_id: String,
-) -> Result<(), DokkiError> {
+) -> Result<(), DokkyError> {
     session_manager::stop_session(&state, &session_id).await
 }
 
@@ -130,7 +130,7 @@ async fn start_video_stream(
     state: tauri::State<'_, SessionStore>,
     session_id: String,
     on_packet: Channel<VideoPacketPayload>,
-) -> Result<(), DokkiError> {
+) -> Result<(), DokkyError> {
     log::info!("[cmd] start_video_stream: session={}", session_id);
     let mut video_stream = session_manager::take_video_stream(&state, &session_id)?;
 
@@ -177,7 +177,7 @@ async fn send_touch(
     y: f64,
     width: u16,
     height: u16,
-) -> Result<(), DokkiError> {
+) -> Result<(), DokkyError> {
     let control = session_manager::get_control(&state, &session_id)?;
     scrcpy_server::send_touch(
         &control,
@@ -188,6 +188,31 @@ async fn send_touch(
         height,
     )
     .await
+}
+
+/// Send a keycode event (key down/up) to a session.
+#[tauri::command]
+async fn send_key(
+    state: tauri::State<'_, SessionStore>,
+    session_id: String,
+    action: u8,
+    keycode: u32,
+    repeat: u32,
+    metastate: u32,
+) -> Result<(), DokkyError> {
+    let control = session_manager::get_control(&state, &session_id)?;
+    scrcpy_server::send_key(&control, action, keycode, repeat, metastate).await
+}
+
+/// Send text input to a session (injected as if typed).
+#[tauri::command]
+async fn send_text(
+    state: tauri::State<'_, SessionStore>,
+    session_id: String,
+    text: String,
+) -> Result<(), DokkyError> {
+    let control = session_manager::get_control(&state, &session_id)?;
+    scrcpy_server::send_text(&control, &text).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -218,6 +243,8 @@ pub fn run() {
             stop_session,
             start_video_stream,
             send_touch,
+            send_key,
+            send_text,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -6,6 +6,7 @@ import type { Device, CloneInfo } from "../types";
 const clonesByDevice = ref<Record<string, CloneInfo[]>>({});
 const loadingDevices = ref<Set<string>>(new Set());
 const iconMap = ref<Record<string, string>>({});
+const nameMap = ref<Record<string, string>>({});
 
 export function useClones(devices: { value: Device[] }) {
   // Auto-load clones when new devices appear
@@ -32,9 +33,10 @@ export function useClones(devices: { value: Device[] }) {
     try {
       const clones = await invoke<CloneInfo[]>("get_dofus_clones", { deviceSerial: serial });
       clonesByDevice.value[serial] = clones;
-      // Update icon map
+      // Update icon + name maps
       for (const c of clones) {
         if (c.icon) iconMap.value[c.package] = c.icon;
+        if (c.display_name) nameMap.value[c.package] = c.display_name;
       }
     } catch {
       clonesByDevice.value[serial] = [];
@@ -58,6 +60,7 @@ export function useClones(devices: { value: Device[] }) {
   return {
     clonesByDevice,
     iconMap,
+    nameMap,
     loadingDevices,
     getClones,
     isLoading,
