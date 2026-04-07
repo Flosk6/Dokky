@@ -5,6 +5,7 @@ import type { Device } from "../types";
 import { useToast } from "../composables/useToast";
 import { useClones } from "../composables/useClones";
 import { useVideoPreset } from "../composables/useVideoPreset";
+import { useShortcuts } from "../composables/useShortcuts";
 import ConfirmModal from "./ConfirmModal.vue";
 import Loader from "./Loader.vue";
 
@@ -34,6 +35,75 @@ const confirmDeletePkg = ref<string | null>(null);
 const COLOR_PRESETS = ["#5865F2", "#ED4245", "#57F287", "#FEE75C", "#EB459E", "#F47B67"];
 
 const { selectedPresetName: selectedPreset, select: selectPreset, VIDEO_PRESETS } = useVideoPreset();
+const { config: shortcutConfig, addGameAction, removeGameAction, startCapture, saveConfig } = useShortcuts();
+
+// Editable nav shortcut
+const editingNav = ref<string | null>(null);
+const navLabels: Record<string, string> = {
+  new_session: "Nouvelle instance",
+  close_session: "Fermer instance",
+  next_tab: "Instance suivante",
+  prev_tab: "Instance précédente",
+};
+
+function startEditNav(key: string) {
+  editingNav.value = key;
+}
+
+function captureNavKey(key: string, e: KeyboardEvent) {
+  if (e.key === "Escape") {
+    editingNav.value = null;
+    return;
+  }
+  e.preventDefault();
+
+  // Build shortcut string
+  const parts: string[] = [];
+  if (e.ctrlKey || e.metaKey) parts.push("Ctrl");
+  if (e.shiftKey) parts.push("Shift");
+  if (e.altKey) parts.push("Alt");
+
+  const k = e.key;
+  if (!["Control", "Shift", "Alt", "Meta"].includes(k)) {
+    parts.push(k === " " ? "Space" : k.length === 1 ? k.toUpperCase() : k);
+    const combo = parts.join("+");
+    (shortcutConfig.value.navigation as Record<string, string>)[key] = combo;
+    saveConfig();
+    editingNav.value = null;
+    toastSuccess(`Raccourci "${navLabels[key]}" → ${combo}`);
+  }
+}
+
+// New action form
+const newActionKey = ref("");
+const newActionLabel = ref("");
+const waitingCapture = ref(false);
+const capturedCoords = ref<{ x: number; y: number } | null>(null);
+
+function handleAddAction() {
+  if (!newActionKey.value || !newActionLabel.value || !capturedCoords.value) return;
+  addGameAction({
+    key: newActionKey.value,
+    label: newActionLabel.value,
+    x: capturedCoords.value.x,
+    y: capturedCoords.value.y,
+    w: 0.03,
+    h: 0.03,
+  });
+  newActionKey.value = "";
+  newActionLabel.value = "";
+  capturedCoords.value = null;
+  toastSuccess("Raccourci ajouté");
+}
+
+function handleCapture() {
+  waitingCapture.value = true;
+  startCapture((x: number, y: number) => {
+    capturedCoords.value = { x, y };
+    waitingCapture.value = false;
+    toastSuccess(`Coordonnées: ${Math.round(x * 100)}%, ${Math.round(y * 100)}%`);
+  });
+}
 
 const connectedDevices = computed(() =>
   props.devices.filter((d) => d.status === "device")
@@ -160,11 +230,13 @@ function cloneDisplayName(pkg: string): string {
             </div>
           </div>
 
-          <!-- Selected device: clones -->
+          <!-- Selected device content -->
           <div v-if="selectedDevice" class="device-section">
+
+            <!-- CLONES APK (primary) -->
             <div class="section-title">Comptes Dofus Touch</div>
 
-            <Loader v-if="loadingClones" label="Chargement des comptes..." />
+            <Loader v-if="loadingClones" label="Chargement..." />
             <div v-else>
               <div v-for="clone in clones" :key="clone.package" class="clone-row">
                 <img v-if="clone.icon" :src="`data:image/png;base64,${clone.icon}`" class="clone-icon" />
@@ -179,7 +251,6 @@ function cloneDisplayName(pkg: string): string {
                 >×</button>
               </div>
 
-              <!-- Clone form -->
               <div v-if="showCloneForm" class="clone-form">
                 <input
                   v-model="cloneName"
@@ -205,7 +276,7 @@ function cloneDisplayName(pkg: string): string {
                   </button>
                 </div>
               </div>
-              <button v-else class="btn-dashed" @click="showCloneForm = true">+ Nouveau clone</button>
+              <button v-else class="btn-dashed" @click="showCloneForm = true">+ Nouveau clone APK</button>
             </div>
           </div>
 
@@ -233,8 +304,74 @@ function cloneDisplayName(pkg: string): string {
 
           <div class="divider" />
 
-          <div class="section-title">Raccourcis</div>
-          <div class="empty">Bientôt disponible — Phase 3</div>
+          <div class="section-title">Raccourcis en jeu</div>
+
+          <!-- Existing actions -->
+          <div v-if="shortcutConfig.game_actions.length > 0" class="actions-list">
+            <div v-for="action in shortcutConfig.game_actions" :key="action.key" class="action-row">
+              <kbd class="action-key">{{ action.key }}</kbd>
+              <span class="action-label">{{ action.label }}</span>
+              <span class="action-coords">{{ Math.round(action.x * 100) }}%,{{ Math.round(action.y * 100) }}% ±{{ Math.round((action.w ?? 0.02) * 100) }}%</span>
+              <button class="btn-x" @click="removeGameAction(action.key)">×</button>
+            </div>
+          </div>
+          <div v-else class="empty">Aucun raccourci configuré</div>
+
+          <!-- Add new action -->
+          <div class="new-action-form">
+            <div class="form-row">
+              <input
+                v-model="newActionKey"
+                class="input small"
+                placeholder="Touche (ex: 1)"
+                maxlength="1"
+              />
+              <input
+                v-model="newActionLabel"
+                class="input"
+                placeholder="Label (ex: Sort 1)"
+              />
+            </div>
+            <div class="form-row">
+              <button
+                class="btn-sm"
+                :class="{ accent: !capturedCoords && !waitingCapture }"
+                @click="handleCapture"
+              >
+                {{ waitingCapture ? '⟳ Cliquez sur le jeu...' : capturedCoords ? `✓ ${Math.round(capturedCoords.x * 100)}%, ${Math.round(capturedCoords.y * 100)}%` : '⊕ Capturer position' }}
+              </button>
+              <button
+                class="btn-sm accent"
+                :disabled="!newActionKey || !newActionLabel || !capturedCoords"
+                @click="handleAddAction"
+              >
+                Ajouter
+              </button>
+            </div>
+          </div>
+
+          <div class="divider" />
+
+          <div class="section-title">Navigation</div>
+          <div
+            v-for="(navKey, navId) in shortcutConfig.navigation"
+            :key="navId"
+            class="action-row editable"
+            @click="startEditNav(navId as string)"
+          >
+            <kbd v-if="editingNav !== navId" class="action-key">{{ navKey }}</kbd>
+            <input
+              v-else
+              class="input key-capture"
+              placeholder="Appuyez..."
+              readonly
+              autofocus
+              @keydown="captureNavKey(navId as string, $event)"
+              @blur="editingNav = null"
+            />
+            <span class="action-label">{{ navLabels[navId as string] ?? navId }}</span>
+            <span class="action-edit-hint">clic pour modifier</span>
+          </div>
 
           <div class="divider" />
 
@@ -535,6 +672,104 @@ function cloneDisplayName(pkg: string): string {
 
 .setting-label { font-size: 0.82rem; color: var(--text-secondary); }
 .setting-value { font-size: 0.8rem; color: var(--text-primary); font-family: monospace; }
+
+/* Game actions */
+.actions-list {
+  margin-bottom: 10px;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.action-row:last-of-type { border-bottom: none; }
+
+.action-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.action-label {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.action-row.editable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 6px 4px;
+  margin: 0 -4px;
+}
+
+.action-row.editable:hover { background: var(--bg-hover); }
+
+.action-edit-hint {
+  font-size: 0.6rem;
+  color: transparent;
+  transition: color 0.15s;
+}
+
+.action-row.editable:hover .action-edit-hint {
+  color: var(--text-muted);
+}
+
+.key-capture {
+  width: 80px;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  text-align: center;
+  font-family: monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  animation: pulse-border 1s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: var(--accent); }
+  50% { border-color: var(--accent-hover); }
+}
+
+.action-coords {
+  font-size: 0.65rem;
+  font-family: monospace;
+  color: var(--text-muted);
+}
+
+.new-action-form {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-row {
+  display: flex;
+  gap: 6px;
+}
+
+.input.small {
+  width: 60px;
+  flex-shrink: 0;
+  text-align: center;
+}
 
 /* Video presets */
 .preset-grid {

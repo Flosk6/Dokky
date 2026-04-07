@@ -1,4 +1,5 @@
 mod apk_manager;
+mod config_manager;
 mod device_manager;
 mod error;
 mod scrcpy_server;
@@ -54,6 +55,17 @@ async fn remove_dofus_clone(device_serial: String, package: String) -> Result<()
     log::info!("[cmd] remove_dofus_clone: {}", package);
     apk_manager::remove_clone(&device_serial, &package).await
 }
+
+#[tauri::command]
+fn get_config() -> config_manager::AppConfig {
+    config_manager::load_config()
+}
+
+#[tauri::command]
+fn set_config(config: config_manager::AppConfig) -> Result<(), DokkiError> {
+    config_manager::save_config(&config)
+}
+
 
 #[tauri::command]
 async fn create_session(
@@ -199,6 +211,8 @@ pub fn run() {
             get_dofus_icon,
             clone_dofus,
             remove_dofus_clone,
+            get_config,
+            set_config,
             create_session,
             list_sessions,
             stop_session,

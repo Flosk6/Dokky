@@ -186,7 +186,7 @@ pub async fn connect(
         .map_err(|e| DokkiError::ScrcpyLaunchFailed(format!("accept control: {}", e)))?;
     log::info!("[scrcpy] Control socket connected!");
 
-    // 8. Send START_APP control message if needed
+    // 8. Launch the app on the virtual display via scrcpy START_APP
     let control_arc = Arc::new(AsyncMutex::new(control_stream));
     if !app_package.is_empty() {
         log::info!("[scrcpy] Sending START_APP for '{}'", app_package);

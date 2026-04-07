@@ -2,18 +2,52 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { Channel } from "@tauri-apps/api/core";
+import { useShortcuts } from "../composables/useShortcuts";
+import { defineAsyncComponent } from "vue";
+const ShortcutOverlay = defineAsyncComponent(() => import("./ShortcutOverlay.vue"));
 
 const props = defineProps<{
   sessionId: string;
   width: number;
   height: number;
+  shortcutMode?: boolean;
 }>();
 
 const emit = defineEmits<{
   error: [message: string];
+  closeShortcuts: [];
 }>();
 
+const { config, captureMode, captureCallback, endCapture, registerTouchSender } = useShortcuts();
+
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+const wrapRef = ref<HTMLElement | null>(null);
+const canvasStyle = ref({ width: '100%', height: '100%' });
+let resizeObserver: ResizeObserver | null = null;
+
+function updateCanvasSize() {
+  const wrap = wrapRef.value;
+  if (!wrap || !props.width || !props.height) return;
+  const containerW = wrap.clientWidth;
+  const containerH = wrap.clientHeight;
+  const aspect = props.width / props.height;
+  const containerAspect = containerW / containerH;
+
+  let cssW: number, cssH: number;
+  if (containerAspect > aspect) {
+    // Container is wider → fit height
+    cssH = containerH;
+    cssW = cssH * aspect;
+  } else {
+    // Container is taller → fit width
+    cssW = containerW;
+    cssH = cssW / aspect;
+  }
+  canvasStyle.value = {
+    width: `${Math.round(cssW)}px`,
+    height: `${Math.round(cssH)}px`,
+  };
+}
 let decoder: VideoDecoder | null = null;
 let configData: Uint8Array | null = null;
 let isConfigured = false;
@@ -78,15 +112,50 @@ function sendTouch(action: number, event: MouseEvent) {
   }).catch(() => {});
 }
 
+/// Send a tap at a random position within a normalized zone (simulates human-like taps).
+function sendTapInZone(cx: number, cy: number, w: number, h: number) {
+  // Randomize within the zone
+  const normX = cx + (Math.random() - 0.5) * w;
+  const normY = cy + (Math.random() - 0.5) * h;
+  const x = Math.round(Math.max(0, Math.min(1, normX)) * props.width);
+  const y = Math.round(Math.max(0, Math.min(1, normY)) * props.height);
+  // Simulate DOWN then UP with slight random delay (30-80ms)
+  invoke("send_touch", { sessionId: props.sessionId, action: 0, x, y, width: props.width, height: props.height }).catch(() => {});
+  setTimeout(() => {
+    invoke("send_touch", { sessionId: props.sessionId, action: 1, x, y, width: props.width, height: props.height }).catch(() => {});
+  }, 30 + Math.random() * 50);
+}
+
+// Register this player's touch sender for game action shortcuts
+registerTouchSender((key: string) => {
+  const action = config.value.game_actions.find((a) => a.key.toLowerCase() === key.toLowerCase());
+  if (action) {
+    sendTapInZone(action.x, action.y, action.w ?? 0.02, action.h ?? 0.02);
+  }
+});
+
 function onMouseDown(e: MouseEvent) {
+  // Capture mode: record normalized coordinates
+  if (captureMode.value && captureCallback.value) {
+    const canvas = canvasRef.value;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const normX = (e.clientX - rect.left) / rect.width;
+    const normY = (e.clientY - rect.top) / rect.height;
+    captureCallback.value(normX, normY);
+    endCapture();
+    return;
+  }
   sendTouch(0, e); // ACTION_DOWN
 }
 
 function onMouseUp(e: MouseEvent) {
+  if (captureMode.value) return;
   sendTouch(1, e); // ACTION_UP
 }
 
 function onMouseMove(e: MouseEvent) {
+  if (captureMode.value) return;
   if (e.buttons & 1) {
     sendTouch(2, e); // ACTION_MOVE (only while pressed)
   }
@@ -194,36 +263,65 @@ async function startStreaming() {
 
 onMounted(() => {
   startStreaming();
+  // Track container size to scale canvas properly
+  if (wrapRef.value) {
+    resizeObserver = new ResizeObserver(() => updateCanvasSize());
+    resizeObserver.observe(wrapRef.value);
+    updateCanvasSize();
+  }
 });
 
 onUnmounted(() => {
   if (decoder && decoder.state !== "closed") {
     decoder.close();
   }
+  resizeObserver?.disconnect();
 });
 
 </script>
 
 <template>
-  <canvas
-    ref="canvasRef"
-    :width="width"
-    :height="height"
-    class="video-canvas"
-    @mousedown="onMouseDown"
-    @mouseup="onMouseUp"
-    @mousemove="onMouseMove"
-    @contextmenu.prevent
-  />
+  <div ref="wrapRef" class="video-wrap">
+    <div class="video-inner" :style="canvasStyle">
+      <canvas
+        ref="canvasRef"
+        :width="width"
+        :height="height"
+        class="video-canvas"
+        @mousedown="onMouseDown"
+        @mouseup="onMouseUp"
+        @mousemove="onMouseMove"
+        @contextmenu.prevent
+      />
+      <ShortcutOverlay
+        :active="!!shortcutMode"
+        :canvas-width="width"
+        :canvas-height="height"
+        @close="emit('closeShortcuts')"
+      />
+    </div>
+  </div>
 </template>
 
 <style scoped>
+.video-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.video-inner {
+  position: relative;
+}
+
 .video-canvas {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  display: block;
   cursor: crosshair;
   background: #000;
-  border-radius: 8px;
 }
 </style>

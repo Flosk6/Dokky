@@ -30,6 +30,7 @@ const { preset, displaySpec } = useVideoPreset();
 
 const showNewSessionDialog = ref(false);
 const showSettings = ref(false);
+const showShortcuts = ref(false);
 
 async function handleCreateSession(deviceSerial: string, appPackage: string) {
   try {
@@ -85,7 +86,7 @@ useShortcuts({
     />
 
     <!-- Game area -->
-    <main class="game">
+    <main class="game" style="position: relative;">
       <div v-if="sessions.length === 0" class="empty-state">
         <div class="empty-logo">D</div>
         <h1>Dokki</h1>
@@ -117,13 +118,15 @@ useShortcuts({
           :session-id="session.id"
           :width="session.width"
           :height="session.height"
+          :shortcut-mode="showShortcuts"
+          @close-shortcuts="showShortcuts = false"
         />
       </div>
     </main>
 
     <!-- Sidebar -->
     <ActionSidebar
-      @toggle-shortcuts="() => {}"
+      @toggle-shortcuts="() => { console.log('TOGGLE SHORTCUTS', showShortcuts); showShortcuts = !showShortcuts; }"
       @toggle-settings="showSettings = !showSettings"
     />
 
