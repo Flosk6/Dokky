@@ -1,0 +1,25 @@
+{
+  "name": "dokki",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "tauri": "tauri"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "vue": "^3.5.32"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/cli": "^2.10.1",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "typescript": "^6.0.2",
+    "vite": "^6.4.2",
+    "vue-tsc": "^3.2.6"
+  }
+}

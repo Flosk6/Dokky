@@ -1,0 +1,180 @@
+📄 Projet : Desktop Multi-Instance Android via scrcpy
+🎯 Objectif
+
+Créer une application desktop permettant de :
+
+détecter automatiquement les devices Android connectés (USB)
+ouvrir plusieurs instances de jeu sur un même device via --new-display
+afficher chaque instance dans un onglet interne (type Chrome)
+naviguer rapidement entre les instances (raccourcis clavier)
+envoyer des actions (clics, sorts, macros) via clavier
+
+👉 L’objectif est une expérience de jeu multi-compte fluide sur PC, pilotée depuis une seule app.
+
+🧠 Concept clé
+
+Un onglet ≠ une fenêtre scrcpy
+Un onglet = une session
+
+Modèle mental :
+Device (téléphone)
+  ├── Display #1 (principal)
+  ├── Display #2 (virtuel)
+  ├── Display #3 (virtuel)
+        ↓
+Chaque display = 1 session = 1 onglet
+🧩 Architecture globale
+1. DeviceManager
+
+Responsable de :
+
+adb devices
+détection auto USB
+infos device (résolution, nom, id)
+2. DisplayManager
+
+Responsable de :
+
+création des displays virtuels (--new-display)
+gestion des ids de display
+mapping display → session
+3. SessionManager
+
+Chaque session contient :
+
+deviceId
+displayId
+appPackage
+état (running, stopped)
+flux vidéo
+canal de contrôle
+4. TabManager (UI)
+onglets type Chrome
+1 onglet = 1 session
+gestion focus
+fermeture / duplication
+5. Renderer
+
+Affiche le flux vidéo dans chaque onglet
+
+👉 2 approches possibles :
+
+V1 : fenêtre scrcpy externe
+V2 : rendu intégré (objectif final)
+6. InputRouter
+capture clavier global
+envoie les inputs vers la session active
+
+Exemples :
+
+1 → sort 1
+A → action custom
+clic souris → tap Android
+7. ActionMap
+
+Mapping configurable :
+
+{
+  "spell_1": { "x": 0.82, "y": 0.91 },
+  "spell_2": { "x": 0.88, "y": 0.91 }
+}
+
+👉 coordonnées normalisées (0 → 1) pour être indépendantes de la résolution
+
+🔄 Flow utilisateur
+L’utilisateur branche son téléphone
+L’app détecte automatiquement le device
+L’utilisateur clique sur “New session”
+L’app :
+crée un display virtuel
+lance le jeu dessus
+ouvre un nouvel onglet
+L’utilisateur peut :
+switch avec Alt+Tab
+utiliser des raccourcis clavier
+ouvrir plusieurs sessions
+⚙️ Stack recommandée
+Option rapide (MVP)
+Tauri + Rust
+ADB via CLI
+scrcpy en process externe
+
+👉 rapide, fiable, peu de dev
+
+Option avancée (produit final)
+Tauri / Electron + backend Rust
+fork / adaptation scrcpy
+rendu vidéo intégré
+🚀 Plan de développement
+Phase 1 — MVP (2–5 jours)
+
+Objectif : valider le concept
+
+ détecter les devices (adb)
+ bouton “new session”
+
+ lancer scrcpy avec :
+
+scrcpy --new-display=1920x1080 --start-app=com.xxx
+ ouvrir plusieurs sessions
+ switch via raccourcis clavier
+ gestion simple des fenêtres
+
+👉 à ce stade = UX déjà exploitable
+
+Phase 2 — UI propre (5–10 jours)
+ interface avec tabs
+ sidebar devices
+ gestion sessions propre
+ raccourcis personnalisables
+ profils par jeu
+Phase 3 — Input avancé (5–10 jours)
+ mapping clavier → actions
+ macros simples
+ calibration visuelle (click zones)
+Phase 4 — Intégration vidéo (gros morceau)
+ suppression dépendance fenêtre scrcpy
+ rendu vidéo intégré
+ contrôle complet dans l’app
+⚠️ Contraintes connues
+1. Compatibilité device
+--new-display pas stable partout
+dépend de Android / ROM / constructeur
+
+👉 acceptable pour ton projet
+
+2. Apps / jeux
+certains jeux peuvent :
+refuser display virtuel
+mal fonctionner
+3. Performance
+CPU (décodage vidéo)
+USB bandwidth
+nombre de sessions limité par device
+💡 Différenciateurs produit
+
+Ce que tu peux faire mieux que scrcpy :
+
+UI multi-onglets (énorme gain UX)
+raccourcis clavier orientés jeu
+profils par jeu
+multi-device centralisé
+macros / automation légère
+overlays (plus tard)
+🧭 Vision long terme
+
+Ton app devient :
+
+👉 un “client desktop Android multi-instance orienté gaming”
+
+Potentiellement :
+
+plugin system
+marketplace de profils
+automation avancée
+analytics gameplay
+🧨 Verdict final
+Faisabilité : 100% OK
+Complexité : modérée → élevée (selon ambition)
+MVP : très rapide à sortir
+potentiel produit : très solide
