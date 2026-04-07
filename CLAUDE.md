@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Dokki** is a desktop application for multi-instance Android gaming via scrcpy. It detects USB-connected Android devices, opens multiple game instances on virtual displays (`--new-display`), and presents each instance as a tab (Chrome-style) with embedded video rendering and touch control.
+**Dokki** is a desktop application **dedicated exclusively to Dofus Touch** multi-accounting. It detects USB-connected Android devices, clones the Dofus Touch APK for independent accounts, opens multiple game instances on virtual displays (`--new-display`), and presents each instance as a tab (Chrome-style) with embedded video rendering and touch control.
+
+**Important**: This app is NOT a generic Android mirroring tool. Every feature, UI decision, and optimization is focused on the Dofus Touch gaming experience.
 
 ## Stack
 

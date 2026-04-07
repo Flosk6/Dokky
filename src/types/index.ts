@@ -14,6 +14,12 @@ export interface SessionInfo {
   status: SessionStatus;
 }
 
+export interface CloneInfo {
+  package: string;
+  display_name: string;
+  icon: string | null;
+}
+
 export type SessionStatus =
   | "Starting"
   | "Running"

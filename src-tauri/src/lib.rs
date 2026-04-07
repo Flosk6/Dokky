@@ -1,3 +1,4 @@
+mod apk_manager;
 mod device_manager;
 mod error;
 mod scrcpy_server;
@@ -19,6 +20,39 @@ async fn get_devices() -> Result<Vec<device_manager::Device>, DokkiError> {
 #[tauri::command]
 async fn get_packages(device_serial: String, filter: String) -> Result<Vec<String>, DokkiError> {
     device_manager::list_packages(&device_serial, &filter).await
+}
+
+#[tauri::command]
+async fn get_dofus_clones(device_serial: String) -> Result<Vec<apk_manager::CloneInfo>, DokkiError> {
+    apk_manager::list_dofus_clones(&device_serial).await
+}
+
+#[tauri::command]
+async fn clone_dofus(
+    device_serial: String,
+    clone_suffix: String,
+    display_name: String,
+    icon_color: Option<String>,
+) -> Result<String, DokkiError> {
+    log::info!("[cmd] clone_dofus: device={}, suffix={}, name={}, color={:?}",
+        device_serial, clone_suffix, display_name, icon_color);
+    apk_manager::clone_dofus(
+        &device_serial,
+        &clone_suffix,
+        &display_name,
+        icon_color.as_deref(),
+    ).await
+}
+
+#[tauri::command]
+async fn get_dofus_icon(device_serial: String) -> Result<String, DokkiError> {
+    apk_manager::get_dofus_icon(&device_serial).await
+}
+
+#[tauri::command]
+async fn remove_dofus_clone(device_serial: String, package: String) -> Result<(), DokkiError> {
+    log::info!("[cmd] remove_dofus_clone: {}", package);
+    apk_manager::remove_clone(&device_serial, &package).await
 }
 
 #[tauri::command]
@@ -153,6 +187,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_devices,
             get_packages,
+            get_dofus_clones,
+            get_dofus_icon,
+            clone_dofus,
+            remove_dofus_clone,
             create_session,
             list_sessions,
             stop_session,

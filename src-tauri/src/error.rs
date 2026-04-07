@@ -7,6 +7,8 @@ pub enum DokkiError {
     ScrcpyNotFound,
     ScrcpyLaunchFailed(String),
     SessionNotFound(String),
+    ApkCloneFailed(String),
+    ToolNotFound(String),
 }
 
 impl std::fmt::Display for DokkiError {
@@ -17,6 +19,8 @@ impl std::fmt::Display for DokkiError {
             DokkiError::ScrcpyNotFound => write!(f, "scrcpy not found in PATH"),
             DokkiError::ScrcpyLaunchFailed(msg) => write!(f, "scrcpy launch failed: {}", msg),
             DokkiError::SessionNotFound(id) => write!(f, "session not found: {}", id),
+            DokkiError::ApkCloneFailed(msg) => write!(f, "APK clone failed: {}", msg),
+            DokkiError::ToolNotFound(tool) => write!(f, "{} not found in PATH", tool),
         }
     }
 }
