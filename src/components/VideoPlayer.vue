@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { Channel } from "@tauri-apps/api/core";
 import { useShortcuts } from "../composables/useShortcuts";
 import { defineAsyncComponent } from "vue";
 const ShortcutOverlay = defineAsyncComponent(() => import("./ShortcutOverlay.vue"));
@@ -227,24 +226,8 @@ function onKeyUp(e: KeyboardEvent) {
   }
 }
 
-// --- Video decoder setup ---
 function setupDecoder() {
-  const canvas = canvasRef.value;
-  if (!canvas) return;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  decoder = new VideoDecoder({
-    output: (frame: VideoFrame) => {
-      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-      frame.close();
-    },
-    error: (e: DOMException) => {
-      console.error("VideoDecoder error:", e);
-      emit("error", e.message);
-    },
-  });
+  // Decoder is set up inside startStreaming with rAF-based rendering
 }
 
 function configureDecoder(annexBConfig: Uint8Array) {
@@ -263,67 +246,99 @@ function configureDecoder(annexBConfig: Uint8Array) {
   isConfigured = true;
 }
 
-// --- Start video stream ---
+// --- Start video stream (poll-based, raw binary) ---
+let streaming = true;
+
 async function startStreaming() {
   setupDecoder();
 
-  const channel = new Channel<{
-    config: boolean;
-    keyframe: boolean;
-    pts: number;
-    data: string;
-  }>();
-
   let packetCount = 0;
-  channel.onmessage = (packet) => {
-    packetCount++;
-    const raw = Uint8Array.from(atob(packet.data), (c) => c.charCodeAt(0));
+  let pendingFrame: VideoFrame | null = null;
 
-    if (packetCount <= 5) {
-      console.log(`[video] packet #${packetCount}: config=${packet.config} keyframe=${packet.keyframe} size=${raw.length} pts=${packet.pts}`);
+  // Use rAF to draw frames — avoids drawing faster than display refresh
+  function drawLoop() {
+    if (!streaming) return;
+    if (pendingFrame) {
+      const canvas = canvasRef.value;
+      const ctx = canvas?.getContext("2d");
+      if (ctx && canvas) {
+        ctx.drawImage(pendingFrame, 0, 0, canvas.width, canvas.height);
+      }
+      pendingFrame.close();
+      pendingFrame = null;
     }
+    requestAnimationFrame(drawLoop);
+  }
+  requestAnimationFrame(drawLoop);
 
-    if (packet.config) {
-      console.log("[video] Received config packet, configuring decoder...");
-      configData = raw;
-      configureDecoder(raw);
-      return;
-    }
+  // Override decoder output to store frame instead of drawing immediately
+  if (decoder) {
+    decoder.close();
+  }
+  decoder = new VideoDecoder({
+    output: (frame: VideoFrame) => {
+      if (pendingFrame) pendingFrame.close();
+      pendingFrame = frame;
+    },
+    error: (e: DOMException) => {
+      console.error("VideoDecoder error:", e);
+      emit("error", e.message);
+    },
+  });
 
-    if (!decoder || !isConfigured) return;
-
-    // For keyframes, prepend SPS/PPS config data
-    let frameData: Uint8Array;
-    if (packet.keyframe && configData) {
-      frameData = new Uint8Array(configData.length + raw.length);
-      frameData.set(configData, 0);
-      frameData.set(raw, configData.length);
-    } else {
-      frameData = raw;
-    }
-
+  while (streaming) {
     try {
+      // Returns raw bytes: [flags:1][pts:8BE][size:4BE][h264data...]
+      const buf: ArrayBuffer = await invoke("read_video_packet", {
+        sessionId: props.sessionId,
+      });
+      const view = new DataView(buf);
+      const raw = new Uint8Array(buf);
+
+      const flags = view.getUint8(0);
+      const isConfig = (flags & 1) !== 0;
+      const isKeyframe = (flags & 2) !== 0;
+      // pts is signed i64 big-endian at offset 1
+      const ptsHi = view.getInt32(1);
+      const ptsLo = view.getUint32(5);
+      const pts = ptsHi * 0x100000000 + ptsLo;
+      const h264Data = raw.subarray(13);
+
+      packetCount++;
+      if (packetCount <= 3) {
+        console.log(`[video] packet #${packetCount}: config=${isConfig} keyframe=${isKeyframe} size=${h264Data.length}`);
+      }
+
+      if (isConfig) {
+        configData = h264Data;
+        configureDecoder(h264Data);
+        continue;
+      }
+
+      if (!decoder || !isConfigured) continue;
+
+      let frameData: Uint8Array;
+      if (isKeyframe && configData) {
+        frameData = new Uint8Array(configData.length + h264Data.length);
+        frameData.set(configData, 0);
+        frameData.set(h264Data, configData.length);
+      } else {
+        frameData = h264Data;
+      }
+
       decoder.decode(
         new EncodedVideoChunk({
-          type: packet.keyframe ? "key" : "delta",
-          timestamp: packet.pts,
+          type: isKeyframe ? "key" : "delta",
+          timestamp: pts,
           data: frameData,
         })
       );
     } catch (e) {
-      console.error("Decode error:", e);
+      if (streaming) {
+        console.error("[video] Stream error:", e);
+      }
+      break;
     }
-  };
-
-  try {
-    console.log("[video] Calling start_video_stream for session:", props.sessionId);
-    await invoke("start_video_stream", {
-      sessionId: props.sessionId,
-      onPacket: channel,
-    });
-    console.log("[video] Stream ended normally");
-  } catch (e) {
-    console.error("[video] Stream error:", e);
   }
 }
 
@@ -338,6 +353,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  streaming = false;
   if (decoder && decoder.state !== "closed") {
     decoder.close();
   }

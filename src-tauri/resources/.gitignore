@@ -1,0 +1,4 @@
+# Bundled binaries (collected by scripts/collect-deps.sh)
+*.jar
+bin/
+jre/

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { useDevices } from "./composables/useDevices";
 import { useSessions } from "./composables/useSessions";
 import { useShortcuts } from "./composables/useShortcuts";
@@ -13,7 +13,7 @@ import NewSessionDialog from "./components/NewSessionDialog.vue";
 import VideoPlayer from "./components/VideoPlayer.vue";
 import Toast from "./components/Toast.vue";
 
-const { devices, error: devicesError } = useDevices();
+const { devices, error: devicesError, setSlowPolling } = useDevices();
 const {
   sessions,
   activeSessionId,
@@ -24,19 +24,23 @@ const {
   switchNext,
   switchPrev,
 } = useSessions();
+
+// Slow down device polling when sessions are active
+watch(() => sessions.value.length, (count) => setSlowPolling(count > 0));
 const { error: toastError, success: toastSuccess } = useToast();
-const { iconMap, nameMap } = useClones(devices);
+const { iconMap } = useClones(devices);
 const { preset, displaySpec } = useVideoPreset();
 
 const showNewSessionDialog = ref(false);
 const showSettings = ref(false);
 const showShortcuts = ref(false);
 
-async function handleCreateSession(deviceSerial: string, appPackage: string) {
+async function handleCreateSession(deviceSerial: string, appPackage: string, displayName: string) {
   try {
     await createSession(
       deviceSerial,
       appPackage,
+      displayName,
       displaySpec.value,
       preset.value.bitrate,
       preset.value.fps,
@@ -81,7 +85,6 @@ useShortcuts({
       :sessions="sessions"
       :active-session-id="activeSessionId"
       :icon-map="iconMap"
-      :name-map="nameMap"
       @select="switchTo"
       @close="handleCloseSession"
       @new-session="showNewSessionDialog = true"
@@ -128,7 +131,7 @@ useShortcuts({
 
     <!-- Sidebar -->
     <ActionSidebar
-      @toggle-shortcuts="() => { console.log('TOGGLE SHORTCUTS', showShortcuts); showShortcuts = !showShortcuts; }"
+      @toggle-shortcuts="showShortcuts = !showShortcuts"
       @toggle-settings="showSettings = !showSettings"
     />
 

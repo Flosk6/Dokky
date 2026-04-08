@@ -6,7 +6,6 @@ defineProps<{
   sessions: SessionInfo[];
   activeSessionId: string | null;
   iconMap?: Record<string, string>;
-  nameMap?: Record<string, string>;
 }>();
 
 defineEmits<{
@@ -25,7 +24,7 @@ defineEmits<{
         :session="session"
         :active="session.id === activeSessionId"
         :icon="iconMap?.[session.app_package]"
-        :display-name="nameMap?.[session.app_package]"
+        :display-name="session.display_name"
         @click="$emit('select', session.id)"
         @close="$emit('close', session.id)"
       />

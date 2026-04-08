@@ -4,7 +4,6 @@ use serde::Serialize;
 pub enum DokkyError {
     AdbNotFound,
     AdbCommandFailed(String),
-    ScrcpyNotFound,
     ScrcpyLaunchFailed(String),
     SessionNotFound(String),
     ApkCloneFailed(String),
@@ -16,7 +15,6 @@ impl std::fmt::Display for DokkyError {
         match self {
             DokkyError::AdbNotFound => write!(f, "adb not found in PATH"),
             DokkyError::AdbCommandFailed(msg) => write!(f, "adb command failed: {}", msg),
-            DokkyError::ScrcpyNotFound => write!(f, "scrcpy not found in PATH"),
             DokkyError::ScrcpyLaunchFailed(msg) => write!(f, "scrcpy launch failed: {}", msg),
             DokkyError::SessionNotFound(id) => write!(f, "session not found: {}", id),
             DokkyError::ApkCloneFailed(msg) => write!(f, "APK clone failed: {}", msg),

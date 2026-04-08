@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::Serialize;
 use tokio::process::Command;
 
@@ -11,8 +13,8 @@ pub struct Device {
 }
 
 /// Runs `adb devices -l` and parses the output into a list of devices.
-pub async fn list_devices() -> Result<Vec<Device>, DokkyError> {
-    let output = Command::new("adb")
+pub async fn list_devices(adb: &Path) -> Result<Vec<Device>, DokkyError> {
+    let output = Command::new(adb)
         .args(["devices", "-l"])
         .output()
         .await
@@ -63,8 +65,8 @@ fn parse_adb_output(output: &str) -> Vec<Device> {
 
 /// List installed packages on a device matching a filter string.
 /// Runs `adb -s <serial> shell pm list packages <filter>` and parses results.
-pub async fn list_packages(serial: &str, filter: &str) -> Result<Vec<String>, DokkyError> {
-    let output = Command::new("adb")
+pub async fn list_packages(adb: &Path, serial: &str, filter: &str) -> Result<Vec<String>, DokkyError> {
+    let output = Command::new(adb)
         .args(["-s", serial, "shell", "pm", "list", "packages"])
         .output()
         .await

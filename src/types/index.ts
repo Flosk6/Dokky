@@ -8,6 +8,7 @@ export interface SessionInfo {
   id: string;
   device_serial: string;
   app_package: string;
+  display_name: string;
   display_spec: string;
   width: number;
   height: number;

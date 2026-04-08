@@ -11,7 +11,7 @@ const props = defineProps<{
 
 defineEmits<{
   close: [];
-  create: [deviceSerial: string, appPackage: string];
+  create: [deviceSerial: string, appPackage: string, displayName: string];
 }>();
 
 const connectedDevices = computed(() =>
@@ -28,10 +28,12 @@ const { getClones, isLoading } = useClones(devicesRef);
 const clones = computed(() => getClones(selectedDevice.value));
 const loading = computed(() => isLoading(selectedDevice.value));
 
-function handleCreate(emit: (event: "create", deviceSerial: string, appPackage: string) => void) {
+function handleCreate(emit: (event: "create", deviceSerial: string, appPackage: string, displayName: string) => void) {
   if (emitted || !selectedDevice.value || !selectedPackage.value) return;
   emitted = true;
-  emit("create", selectedDevice.value, selectedPackage.value);
+  const clone = clones.value.find((c) => c.package === selectedPackage.value);
+  const name = clone?.display_name || selectedPackage.value.split(".").pop() || selectedPackage.value;
+  emit("create", selectedDevice.value, selectedPackage.value, name);
   setTimeout(() => { emitted = false; }, 500);
 }
 

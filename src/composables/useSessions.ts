@@ -14,6 +14,7 @@ export function useSessions() {
   async function createSession(
     deviceSerial: string,
     appPackage: string,
+    displayName?: string,
     displaySpec?: string,
     videoBitRate?: number,
     maxFps?: number,
@@ -24,6 +25,7 @@ export function useSessions() {
       const session = await invoke<SessionInfo>("create_session", {
         deviceSerial,
         appPackage,
+        displayName,
         displaySpec,
         videoBitRate,
         maxFps,

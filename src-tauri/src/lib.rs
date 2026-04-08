@@ -2,58 +2,80 @@ mod apk_manager;
 mod config_manager;
 mod device_manager;
 mod error;
+mod paths;
 mod scrcpy_server;
 mod session_manager;
 
-use base64::Engine;
 use serde::Serialize;
-use tauri::ipc::Channel;
+use tauri::ipc::Response;
 use tauri::Manager;
 
 use error::DokkyError;
+use paths::BundledPaths;
 use session_manager::SessionStore;
 
 #[tauri::command]
-async fn get_devices() -> Result<Vec<device_manager::Device>, DokkyError> {
-    device_manager::list_devices().await
+async fn get_devices(
+    paths: tauri::State<'_, BundledPaths>,
+) -> Result<Vec<device_manager::Device>, DokkyError> {
+    device_manager::list_devices(&paths.adb).await
 }
 
 #[tauri::command]
-async fn get_packages(device_serial: String, filter: String) -> Result<Vec<String>, DokkyError> {
-    device_manager::list_packages(&device_serial, &filter).await
+async fn get_packages(
+    paths: tauri::State<'_, BundledPaths>,
+    device_serial: String,
+    filter: String,
+) -> Result<Vec<String>, DokkyError> {
+    device_manager::list_packages(&paths.adb, &device_serial, &filter).await
 }
 
 #[tauri::command]
-async fn get_dofus_clones(device_serial: String) -> Result<Vec<apk_manager::CloneInfo>, DokkyError> {
-    apk_manager::list_dofus_clones(&device_serial).await
+async fn get_dofus_clones(
+    paths: tauri::State<'_, BundledPaths>,
+    device_serial: String,
+) -> Result<Vec<apk_manager::CloneInfo>, DokkyError> {
+    apk_manager::list_dofus_clones(&paths, &device_serial).await
 }
 
 #[tauri::command]
 async fn clone_dofus(
+    paths: tauri::State<'_, BundledPaths>,
     device_serial: String,
     clone_suffix: String,
     display_name: String,
     icon_color: Option<String>,
 ) -> Result<String, DokkyError> {
-    log::info!("[cmd] clone_dofus: device={}, suffix={}, name={}, color={:?}",
-        device_serial, clone_suffix, display_name, icon_color);
+    log::info!(
+        "[cmd] clone_dofus: device={}, suffix={}, name={}, color={:?}",
+        device_serial, clone_suffix, display_name, icon_color
+    );
     apk_manager::clone_dofus(
+        &paths,
         &device_serial,
         &clone_suffix,
         &display_name,
         icon_color.as_deref(),
-    ).await
+    )
+    .await
 }
 
 #[tauri::command]
-async fn get_dofus_icon(device_serial: String) -> Result<String, DokkyError> {
-    apk_manager::get_dofus_icon(&device_serial).await
+async fn get_dofus_icon(
+    paths: tauri::State<'_, BundledPaths>,
+    device_serial: String,
+) -> Result<String, DokkyError> {
+    apk_manager::get_dofus_icon(&paths, &device_serial).await
 }
 
 #[tauri::command]
-async fn remove_dofus_clone(device_serial: String, package: String) -> Result<(), DokkyError> {
+async fn remove_dofus_clone(
+    paths: tauri::State<'_, BundledPaths>,
+    device_serial: String,
+    package: String,
+) -> Result<(), DokkyError> {
     log::info!("[cmd] remove_dofus_clone: {}", package);
-    apk_manager::remove_clone(&device_serial, &package).await
+    apk_manager::remove_clone(&paths, &device_serial, &package).await
 }
 
 #[tauri::command]
@@ -66,12 +88,13 @@ fn set_config(config: config_manager::AppConfig) -> Result<(), DokkyError> {
     config_manager::save_config(&config)
 }
 
-
 #[tauri::command]
 async fn create_session(
     state: tauri::State<'_, SessionStore>,
+    paths: tauri::State<'_, BundledPaths>,
     device_serial: String,
     app_package: String,
+    display_name: Option<String>,
     display_spec: Option<String>,
     video_bit_rate: Option<u32>,
     max_fps: Option<u32>,
@@ -79,19 +102,27 @@ async fn create_session(
     let spec = display_spec.unwrap_or_else(|| "1920x1080".to_string());
     let bitrate = video_bit_rate.unwrap_or(8_000_000);
     let fps = max_fps.unwrap_or(60);
-    log::info!("[cmd] create_session: device={}, app={}, display={}, bitrate={}, fps={}",
-        device_serial, app_package, spec, bitrate, fps);
+    let name = display_name.unwrap_or_else(|| app_package.clone());
+    log::info!(
+        "[cmd] create_session: device={}, app={}, name={}, display={}, bitrate={}, fps={}",
+        device_serial, app_package, name, spec, bitrate, fps
+    );
     let result = session_manager::create_session(
         &state,
+        &paths,
         device_serial,
         app_package,
+        name,
         spec,
         bitrate,
         fps,
     )
     .await;
     match &result {
-        Ok(info) => log::info!("[cmd] Session created: id={}, {}x{}", info.id, info.width, info.height),
+        Ok(info) => log::info!(
+            "[cmd] Session created: id={}, {}x{}",
+            info.id, info.width, info.height
+        ),
         Err(e) => log::error!("[cmd] Session creation failed: {}", e),
     }
     result
@@ -110,64 +141,39 @@ async fn stop_session(
     session_manager::stop_session(&state, &session_id).await
 }
 
-/// Payload sent to the frontend for each video packet.
+/// Video packet header returned as JSON metadata.
 #[derive(Clone, Serialize)]
-struct VideoPacketPayload {
-    /// true if this is a codec config packet (SPS/PPS)
+struct VideoPacketMeta {
     config: bool,
-    /// true if this is a keyframe (IDR)
     keyframe: bool,
-    /// presentation timestamp in microseconds
     pts: i64,
-    /// base64-encoded H.264 Annex B data
-    data: String,
+    size: u32,
 }
 
-/// Stream video packets from a session to the frontend via Channel.
-/// This command runs indefinitely until the session is stopped or an error occurs.
+/// Read the next video packet from a session. Returns raw H.264 bytes as Response
+/// with metadata in a custom header. Called in a tight loop from the frontend.
 #[tauri::command]
-async fn start_video_stream(
+async fn read_video_packet(
     state: tauri::State<'_, SessionStore>,
     session_id: String,
-    on_packet: Channel<VideoPacketPayload>,
-) -> Result<(), DokkyError> {
-    log::info!("[cmd] start_video_stream: session={}", session_id);
-    let mut video_stream = session_manager::take_video_stream(&state, &session_id)?;
+) -> Result<Response, DokkyError> {
+    let video_stream = session_manager::get_video_stream(&state, &session_id)?;
+    let mut stream = video_stream.lock().await;
+    let packet = scrcpy_server::read_video_packet(&mut stream).await?;
 
-    let mut frame_count: u64 = 0;
-    loop {
-        match scrcpy_server::read_video_packet(&mut video_stream).await {
-            Ok(packet) => {
-                frame_count += 1;
-                if frame_count <= 3 || frame_count % 100 == 0 {
-                    log::info!(
-                        "[video] packet #{}: config={} keyframe={} size={} pts={}",
-                        frame_count, packet.is_config, packet.is_keyframe,
-                        packet.data.len(), packet.pts_us
-                    );
-                }
-                let payload = VideoPacketPayload {
-                    config: packet.is_config,
-                    keyframe: packet.is_keyframe,
-                    pts: packet.pts_us,
-                    data: base64::engine::general_purpose::STANDARD.encode(&packet.data),
-                };
-                if on_packet.send(payload).is_err() {
-                    log::warn!("[video] Channel closed, stopping stream");
-                    break;
-                }
-            }
-            Err(e) => {
-                log::error!("[video] Stream error: {}", e);
-                break;
-            }
-        }
-    }
+    // Pack metadata (13 bytes) + raw H.264 data into a single binary response:
+    // [flags:1] [pts:8 BE] [size:4 BE] [data...]
+    // flags: bit 0 = config, bit 1 = keyframe
+    let mut buf = Vec::with_capacity(13 + packet.data.len());
+    let flags: u8 = (packet.is_config as u8) | ((packet.is_keyframe as u8) << 1);
+    buf.push(flags);
+    buf.extend_from_slice(&packet.pts_us.to_be_bytes());
+    buf.extend_from_slice(&(packet.data.len() as u32).to_be_bytes());
+    buf.extend_from_slice(&packet.data);
 
-    Ok(())
+    Ok(Response::new(buf))
 }
 
-/// Send a touch event to a session's scrcpy control channel.
 #[tauri::command]
 async fn send_touch(
     state: tauri::State<'_, SessionStore>,
@@ -179,18 +185,9 @@ async fn send_touch(
     height: u16,
 ) -> Result<(), DokkyError> {
     let control = session_manager::get_control(&state, &session_id)?;
-    scrcpy_server::send_touch(
-        &control,
-        action,
-        x as i32,
-        y as i32,
-        width,
-        height,
-    )
-    .await
+    scrcpy_server::send_touch(&control, action, x as i32, y as i32, width, height).await
 }
 
-/// Send a keycode event (key down/up) to a session.
 #[tauri::command]
 async fn send_key(
     state: tauri::State<'_, SessionStore>,
@@ -204,7 +201,6 @@ async fn send_key(
     scrcpy_server::send_key(&control, action, keycode, repeat, metastate).await
 }
 
-/// Send text input to a session (injected as if typed).
 #[tauri::command]
 async fn send_text(
     state: tauri::State<'_, SessionStore>,
@@ -229,6 +225,11 @@ pub fn run() {
                 ))
                 .build(),
         )
+        .setup(|app| {
+            let paths = BundledPaths::resolve(app.handle());
+            app.manage(paths);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_devices,
             get_packages,
@@ -241,7 +242,7 @@ pub fn run() {
             create_session,
             list_sessions,
             stop_session,
-            start_video_stream,
+            read_video_packet,
             send_touch,
             send_key,
             send_text,

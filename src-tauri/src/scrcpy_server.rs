@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex as AsyncMutex;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{timeout, Duration};
 
 use uuid::Uuid;
 
@@ -32,45 +32,25 @@ pub struct VideoPacket {
     pub data: Vec<u8>,
 }
 
-pub fn find_server_jar() -> Result<PathBuf, DokkyError> {
-    let candidates = [
-        PathBuf::from("/opt/homebrew/share/scrcpy/scrcpy-server"),
-        PathBuf::from(format!(
-            "/opt/homebrew/Cellar/scrcpy/{}/share/scrcpy/scrcpy-server",
-            SCRCPY_VERSION
-        )),
-        PathBuf::from("/usr/local/share/scrcpy/scrcpy-server"),
-        PathBuf::from("/usr/share/scrcpy/scrcpy-server"),
-    ];
-
-    for path in &candidates {
-        if path.exists() {
-            log::info!("[scrcpy] Found server jar at: {:?}", path);
-            return Ok(path.clone());
-        }
-    }
-
-    Err(DokkyError::ScrcpyNotFound)
-}
-
 /// Start scrcpy-server on a device and connect using REVERSE tunnel
 /// (same method as the official scrcpy client).
 ///
 /// Reverse tunnel: PC listens on a port, device connects TO the PC.
 /// This is the default and most reliable mode.
 pub async fn connect(
+    adb: &Path,
+    server_jar: &Path,
     device_serial: &str,
     app_package: &str,
     display_spec: &str,
     video_bit_rate: u32,
     max_fps: u32,
 ) -> Result<ScrcpyConnection, DokkyError> {
-    let server_jar = find_server_jar()?;
     let scid = (Uuid::new_v4().as_u128() as u32) & 0x7FFF_FFFF;
 
     // 1. Push server jar to device
     log::info!("[scrcpy] Pushing server jar to device {}...", device_serial);
-    let push = Command::new("adb")
+    let push = Command::new(adb)
         .args(["-s", device_serial, "push",
             server_jar.to_str().unwrap(),
             "/data/local/tmp/scrcpy-server.jar"])
@@ -92,7 +72,7 @@ pub async fn connect(
     log::info!("[scrcpy] Listening on port {}", local_port);
 
     // 3. Set up ADB reverse tunnel: device connects to our local port
-    let reverse = Command::new("adb")
+    let reverse = Command::new(adb)
         .args(["-s", device_serial, "reverse",
             &format!("localabstract:scrcpy_{:08x}", scid),
             &format!("tcp:{}", local_port)])
@@ -121,7 +101,7 @@ pub async fn connect(
     );
     log::info!("[scrcpy] Starting server on device...");
 
-    let mut server_process = Command::new("adb")
+    let mut server_process = Command::new(adb)
         .args(["-s", device_serial, "shell", &server_cmd])
         .kill_on_drop(true)
         .stdout(std::process::Stdio::piped())
@@ -330,8 +310,8 @@ pub async fn send_text(
 }
 
 /// Remove the ADB reverse tunnel.
-pub async fn remove_reverse(device_serial: &str, scid: u32) {
-    let _ = Command::new("adb")
+pub async fn remove_reverse(adb: &Path, device_serial: &str, scid: u32) {
+    let _ = Command::new(adb)
         .args(["-s", device_serial, "reverse", "--remove",
             &format!("localabstract:scrcpy_{:08x}", scid)])
         .output().await;

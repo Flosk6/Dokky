@@ -8,6 +8,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
 use crate::error::DokkyError;
+use crate::paths::BundledPaths;
 use crate::scrcpy_server;
 
 #[derive(Debug, Clone, Serialize)]
@@ -15,6 +16,7 @@ pub struct SessionInfo {
     pub id: String,
     pub device_serial: String,
     pub app_package: String,
+    pub display_name: String,
     pub display_spec: String,
     pub width: u32,
     pub height: u32,
@@ -31,10 +33,9 @@ pub enum SessionStatus {
 
 /// Internal connection state (not serializable).
 struct SessionConnection {
-    video_stream: Option<TcpStream>,
+    video_stream: Arc<AsyncMutex<TcpStream>>,
     control: Arc<AsyncMutex<TcpStream>>,
     server_process: Child,
-    local_port: u16,
 }
 
 struct SessionEntry {
@@ -57,8 +58,10 @@ impl SessionStore {
 /// Create a session by starting scrcpy-server directly (embedded video).
 pub async fn create_session(
     store: &SessionStore,
+    paths: &BundledPaths,
     device_serial: String,
     app_package: String,
+    display_name: String,
     display_spec: String,
     video_bit_rate: u32,
     max_fps: u32,
@@ -66,6 +69,8 @@ pub async fn create_session(
     let id = Uuid::new_v4().to_string();
 
     let conn = scrcpy_server::connect(
+        &paths.adb,
+        &paths.scrcpy_server,
         &device_serial,
         &app_package,
         &display_spec,
@@ -77,6 +82,7 @@ pub async fn create_session(
         id: id.clone(),
         device_serial: device_serial.clone(),
         app_package,
+        display_name,
         display_spec,
         width: conn.width,
         height: conn.height,
@@ -86,10 +92,9 @@ pub async fn create_session(
     let entry = SessionEntry {
         info: info.clone(),
         connection: Some(SessionConnection {
-            video_stream: Some(conn.video_stream),
+            video_stream: Arc::new(AsyncMutex::new(conn.video_stream)),
             control: conn.control_stream,
             server_process: conn.server_process,
-            local_port: conn.local_port,
         }),
     };
 
@@ -98,22 +103,20 @@ pub async fn create_session(
     Ok(info)
 }
 
-/// Take the video stream from a session (can only be taken once).
-pub fn take_video_stream(
+/// Get an Arc to the video stream for reading packets.
+pub fn get_video_stream(
     store: &SessionStore,
     session_id: &str,
-) -> Result<TcpStream, DokkyError> {
-    let mut sessions = store.sessions.lock().unwrap();
+) -> Result<Arc<AsyncMutex<TcpStream>>, DokkyError> {
+    let sessions = store.sessions.lock().unwrap();
     let entry = sessions
-        .get_mut(session_id)
+        .get(session_id)
         .ok_or_else(|| DokkyError::SessionNotFound(session_id.to_string()))?;
     let conn = entry
         .connection
-        .as_mut()
+        .as_ref()
         .ok_or_else(|| DokkyError::SessionNotFound(session_id.to_string()))?;
-    conn.video_stream
-        .take()
-        .ok_or_else(|| DokkyError::ScrcpyLaunchFailed("video stream already taken".to_string()))
+    Ok(conn.video_stream.clone())
 }
 
 /// Get a clone of the control stream Arc for a session.
