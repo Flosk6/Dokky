@@ -34,7 +34,14 @@ const confirmDeletePkg = ref<string | null>(null);
 
 const COLOR_PRESETS = ["#5865F2", "#ED4245", "#57F287", "#FEE75C", "#EB459E", "#F47B67"];
 
-const { selectedPresetName: selectedPreset, select: selectPreset, VIDEO_PRESETS } = useVideoPreset();
+const {
+  selectedPresetName: selectedPreset,
+  isCustom,
+  effectiveSettings,
+  selectPreset,
+  updateCustomSetting,
+  VIDEO_PRESETS,
+} = useVideoPreset();
 const { config: shortcutConfig, saveConfig } = useShortcuts();
 
 // Editable nav shortcut
@@ -149,6 +156,31 @@ async function confirmRemove() {
 function cloneDisplayName(pkg: string): string {
   return clones.value.find((c) => c.package === pkg)?.display_name ?? pkg;
 }
+
+// Floating tooltip
+const tooltipText = ref("");
+const tooltipStyle = ref({ top: "0px", left: "0px", opacity: "0" });
+
+function showTooltip(e: MouseEvent) {
+  const el = e.currentTarget as HTMLElement;
+  const tip = el.getAttribute("data-tip");
+  if (!tip) return;
+  tooltipText.value = tip;
+  const rect = el.getBoundingClientRect();
+  const tipWidth = 250;
+  let left = rect.left - tipWidth - 8;
+  if (left < 8) left = rect.right + 8;
+  let top = rect.top - 4;
+  tooltipStyle.value = {
+    top: `${top}px`,
+    left: `${left}px`,
+    opacity: "1",
+  };
+}
+
+function hideTooltip() {
+  tooltipStyle.value = { ...tooltipStyle.value, opacity: "0" };
+}
 </script>
 
 <template>
@@ -255,20 +287,163 @@ function cloneDisplayName(pkg: string): string {
 
         <!-- SETTINGS TAB -->
         <div v-if="activeTab === 'settings'" class="panel-body">
-          <div class="section-title">Qualité vidéo</div>
+          <!-- Presets -->
+          <div class="section-title">Performance</div>
           <div class="preset-grid">
             <button
-              v-for="preset in VIDEO_PRESETS"
-              :key="preset.name"
+              v-for="p in VIDEO_PRESETS"
+              :key="p.name"
               class="preset-card"
-              :class="{ active: selectedPreset === preset.name }"
-              @click="selectPreset(preset.name)"
+              :class="{ active: selectedPreset === p.name }"
+              @click="selectPreset(p.name)"
             >
-              <span class="preset-name">{{ preset.label }}</span>
-              <span class="preset-detail">{{ preset.resolution }} · {{ preset.dpi }} dpi</span>
-              <span class="preset-detail">{{ preset.fps }} FPS · {{ preset.bitrate / 1000000 }} Mbps</span>
+              <span class="preset-name">{{ p.label }}</span>
+              <span class="preset-detail">{{ p.description }}</span>
+            </button>
+            <button
+              class="preset-card"
+              :class="{ active: isCustom }"
+              @click="selectPreset('custom')"
+            >
+              <span class="preset-name">Custom</span>
+              <span class="preset-detail">Personnaliser chaque paramètre</span>
             </button>
           </div>
+
+          <!-- Custom settings (always visible, editable only in custom mode) -->
+          <div class="divider" />
+          <div class="section-title">Paramètres détaillés</div>
+
+          <div class="setting-row">
+            <span class="setting-label">
+              Résolution
+              <span class="help-tip" @mouseenter="showTooltip" @mouseleave="hideTooltip" data-tip="Résolution du display virtuel Android. Plus bas = moins de pixels à rendre et encoder. Impact fort sur les performances du device. 720p est un bon compromis pour le multi-compte.">?</span>
+            </span>
+            <select
+              class="input select"
+              :disabled="!isCustom"
+              :value="`${effectiveSettings.width}x${effectiveSettings.height}`"
+              @change="(() => { const [w,h] = ($event.target as HTMLSelectElement).value.split('x').map(Number); updateCustomSetting('width', w); updateCustomSetting('height', h); })()"
+            >
+              <option value="3840x2160">3840 × 2160 (4K)</option>
+              <option value="2560x1440">2560 × 1440 (QHD)</option>
+              <option value="1920x1080">1920 × 1080 (Full HD)</option>
+              <option value="1600x900">1600 × 900</option>
+              <option value="1280x720">1280 × 720 (HD)</option>
+              <option value="960x540">960 × 540 (qHD)</option>
+              <option value="854x480">854 × 480 (FWVGA)</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <span class="setting-label">
+              DPI
+              <span class="help-tip" @mouseenter="showTooltip" @mouseleave="hideTooltip" data-tip="Densité de pixels du display virtuel. Affecte la taille des éléments d'interface du jeu. Un DPI plus bas réduit légèrement la charge de rendu. 160 est un bon compromis lisibilité/performance.">?</span>
+            </span>
+            <select
+              class="input select"
+              :disabled="!isCustom"
+              :value="effectiveSettings.dpi"
+              @change="updateCustomSetting('dpi', +($event.target as HTMLSelectElement).value)"
+            >
+              <option :value="120">120 (très gros)</option>
+              <option :value="160">160 (moyen)</option>
+              <option :value="200">200</option>
+              <option :value="240">240 (normal)</option>
+              <option :value="280">280</option>
+              <option :value="320">320 (fin)</option>
+              <option :value="420">420 (natif)</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <span class="setting-label">
+              FPS max
+              <span class="help-tip" @mouseenter="showTooltip" @mouseleave="hideTooltip" data-tip="Nombre d'images par seconde encodées par le device. Impact majeur sur la charge CPU de l'encodeur vidéo. 30 FPS est largement suffisant pour Dofus Touch (jeu tour par tour). Réduire à 30 permet de supporter plus d'instances simultanées.">?</span>
+            </span>
+            <select
+              class="input select"
+              :disabled="!isCustom"
+              :value="effectiveSettings.fps"
+              @change="updateCustomSetting('fps', +($event.target as HTMLSelectElement).value)"
+            >
+              <option :value="15">15 FPS</option>
+              <option :value="20">20 FPS</option>
+              <option :value="30">30 FPS</option>
+              <option :value="45">45 FPS</option>
+              <option :value="60">60 FPS</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <span class="setting-label">
+              Bitrate
+              <span class="help-tip" @mouseenter="showTooltip" @mouseleave="hideTooltip" data-tip="Débit vidéo de l'encodage H.264. Plus haut = meilleure qualité mais plus de bande passante USB et de travail pour l'encodeur. Pour du multi-compte, 2-4 Mbps par instance est recommandé. La bande passante USB totale est partagée entre toutes les instances.">?</span>
+            </span>
+            <select
+              class="input select"
+              :disabled="!isCustom"
+              :value="effectiveSettings.bitrate"
+              @change="updateCustomSetting('bitrate', +($event.target as HTMLSelectElement).value)"
+            >
+              <option :value="1_000_000">1 Mbps</option>
+              <option :value="2_000_000">2 Mbps</option>
+              <option :value="4_000_000">4 Mbps</option>
+              <option :value="6_000_000">6 Mbps</option>
+              <option :value="8_000_000">8 Mbps</option>
+              <option :value="12_000_000">12 Mbps</option>
+              <option :value="16_000_000">16 Mbps</option>
+              <option :value="24_000_000">24 Mbps</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <span class="setting-label">
+              I-frame interval
+              <span class="help-tip" @mouseenter="showTooltip" @mouseleave="hideTooltip" data-tip="Intervalle entre les images-clés (keyframes) H.264. Des keyframes plus fréquentes (1-2s) permettent une reprise plus rapide lors du switch de tab, mais augmentent légèrement le bitrate. Des keyframes espacées (5-10s) réduisent le débit.">?</span>
+            </span>
+            <select
+              class="input select"
+              :disabled="!isCustom"
+              :value="effectiveSettings.iframe_interval"
+              @change="updateCustomSetting('iframe_interval', +($event.target as HTMLSelectElement).value)"
+            >
+              <option :value="1">1 sec (rapide)</option>
+              <option :value="2">2 sec</option>
+              <option :value="3">3 sec</option>
+              <option :value="5">5 sec</option>
+              <option :value="10">10 sec (léger)</option>
+            </select>
+          </div>
+
+          <div class="divider" />
+          <div class="section-title">Optimisations device</div>
+
+          <label class="toggle-row" :class="{ disabled: !isCustom }">
+            <span class="setting-label">
+              Désactiver animations
+              <span class="help-tip" @mouseenter="showTooltip" @mouseleave="hideTooltip" data-tip="Désactive les animations de transition, de fenêtre et d'éléments sur le device Android. Réduit significativement la charge GPU lorsque plusieurs displays virtuels sont actifs. Les animations sont désactivées via ADB au lancement d'une session. Peut affecter l'expérience hors-jeu sur le device.">?</span>
+            </span>
+            <input
+              type="checkbox" class="toggle"
+              :checked="effectiveSettings.disable_animations"
+              :disabled="!isCustom"
+              @change="updateCustomSetting('disable_animations', ($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+
+          <label class="toggle-row" :class="{ disabled: !isCustom }">
+            <span class="setting-label">
+              Luminosité écran min
+              <span class="help-tip" @mouseenter="showTooltip" @mouseleave="hideTooltip" data-tip="Réduit la luminosité de l'écran physique du device au minimum au lancement d'une session. Économise la batterie tout en gardant le device actif et réactif aux inputs. La luminosité automatique est restaurée quand l'option est désactivée.">?</span>
+            </span>
+            <input
+              type="checkbox" class="toggle"
+              :checked="effectiveSettings.screen_off"
+              :disabled="!isCustom"
+              @change="updateCustomSetting('screen_off', ($event.target as HTMLInputElement).checked)"
+            />
+          </label>
 
           <div class="divider" />
 
@@ -308,6 +483,13 @@ function cloneDisplayName(pkg: string): string {
       </div>
     </div>
   </Transition>
+
+  <Teleport to="body">
+    <div
+      class="floating-tooltip"
+      :style="tooltipStyle"
+    >{{ tooltipText }}</div>
+  </Teleport>
 
   <ConfirmModal
     :visible="!!confirmDeletePkg"
@@ -710,5 +892,110 @@ function cloneDisplayName(pkg: string): string {
   color: var(--text-muted);
   font-size: 0.82rem;
   padding: 8px 0;
+}
+
+/* Select inputs */
+.input.select {
+  width: auto;
+  min-width: 120px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.input.select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Toggle rows */
+.toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.toggle-row.disabled { opacity: 0.5; cursor: not-allowed; }
+
+.toggle-row .setting-label {
+  flex: 1;
+  min-width: 100px;
+}
+
+.toggle-hint {
+  width: 100%;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: -4px;
+}
+
+.toggle {
+  width: 36px;
+  height: 20px;
+  appearance: none;
+  background: var(--border);
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle:checked { background: var(--accent); }
+
+.toggle::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.toggle:checked::before { transform: translateX(16px); }
+.toggle:disabled { cursor: not-allowed; }
+
+/* Help tooltip */
+.help-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.help-tip:hover { background: var(--accent); color: #fff; }
+</style>
+
+<style>
+/* Floating tooltip — not scoped because it's teleported to body */
+.floating-tooltip {
+  position: fixed;
+  width: 250px;
+  padding: 8px 10px;
+  background: var(--bg-primary, #1a1a2e);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  color: var(--text-secondary, #aaa);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  white-space: normal;
+  pointer-events: none;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.15s;
 }
 </style>

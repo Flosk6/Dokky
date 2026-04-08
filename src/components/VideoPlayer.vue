@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useShortcuts } from "../composables/useShortcuts";
 import { defineAsyncComponent } from "vue";
@@ -10,6 +10,7 @@ const props = defineProps<{
   width: number;
   height: number;
   shortcutMode?: boolean;
+  active?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -248,6 +249,9 @@ function configureDecoder(annexBConfig: Uint8Array) {
 
 // --- Start video stream (poll-based, raw binary) ---
 let streaming = true;
+// Track active state — inactive tabs decode but skip canvas rendering
+let isActive = props.active !== false;
+watch(() => props.active, (val) => { isActive = val !== false; });
 
 async function startStreaming() {
   setupDecoder();
@@ -255,14 +259,16 @@ async function startStreaming() {
   let packetCount = 0;
   let pendingFrame: VideoFrame | null = null;
 
-  // Use rAF to draw frames — avoids drawing faster than display refresh
+  // rAF loop: only draw when active, but always consume decoded frames
   function drawLoop() {
     if (!streaming) return;
     if (pendingFrame) {
-      const canvas = canvasRef.value;
-      const ctx = canvas?.getContext("2d");
-      if (ctx && canvas) {
-        ctx.drawImage(pendingFrame, 0, 0, canvas.width, canvas.height);
+      if (isActive) {
+        const canvas = canvasRef.value;
+        const ctx = canvas?.getContext("2d");
+        if (ctx && canvas) {
+          ctx.drawImage(pendingFrame, 0, 0, canvas.width, canvas.height);
+        }
       }
       pendingFrame.close();
       pendingFrame = null;
@@ -271,7 +277,6 @@ async function startStreaming() {
   }
   requestAnimationFrame(drawLoop);
 
-  // Override decoder output to store frame instead of drawing immediately
   if (decoder) {
     decoder.close();
   }
@@ -288,7 +293,6 @@ async function startStreaming() {
 
   while (streaming) {
     try {
-      // Returns raw bytes: [flags:1][pts:8BE][size:4BE][h264data...]
       const buf: ArrayBuffer = await invoke("read_video_packet", {
         sessionId: props.sessionId,
       });
@@ -298,7 +302,6 @@ async function startStreaming() {
       const flags = view.getUint8(0);
       const isConfig = (flags & 1) !== 0;
       const isKeyframe = (flags & 2) !== 0;
-      // pts is signed i64 big-endian at offset 1
       const ptsHi = view.getInt32(1);
       const ptsLo = view.getUint32(5);
       const pts = ptsHi * 0x100000000 + ptsLo;
@@ -406,7 +409,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   display: block;
-  cursor: crosshair;
+  cursor: default;
   background: #000;
 }
 </style>

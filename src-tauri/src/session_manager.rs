@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::error::DokkyError;
 use crate::paths::BundledPaths;
-use crate::scrcpy_server;
+use crate::scrcpy_server::{self, VideoCodecOptions};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionInfo {
@@ -65,6 +65,7 @@ pub async fn create_session(
     display_spec: String,
     video_bit_rate: u32,
     max_fps: u32,
+    codec_options: VideoCodecOptions,
 ) -> Result<SessionInfo, DokkyError> {
     let id = Uuid::new_v4().to_string();
 
@@ -76,6 +77,7 @@ pub async fn create_session(
         &display_spec,
         video_bit_rate,
         max_fps,
+        &codec_options,
     ).await?;
 
     let info = SessionInfo {

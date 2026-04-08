@@ -39,10 +39,24 @@ export interface NavigationShortcuts {
   prev_tab: string;
 }
 
+export interface VideoSettings {
+  width: number;
+  height: number;
+  dpi: number;
+  fps: number;
+  bitrate: number;
+  baseline_profile: boolean;
+  iframe_interval: number;
+  no_vd_system_decorations: boolean;
+  disable_animations: boolean;
+  screen_off: boolean;
+}
+
 export interface AppConfig {
   navigation: NavigationShortcuts;
   game_actions: GameAction[];
   video_preset: string;
+  video_settings: VideoSettings;
 }
 
 export type SessionStatus =

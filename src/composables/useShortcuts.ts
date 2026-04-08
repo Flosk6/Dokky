@@ -20,6 +20,10 @@ const config = ref<AppConfig>({
   },
   game_actions: [],
   video_preset: "high",
+  video_settings: {
+    width: 1920, height: 1080, dpi: 240, fps: 60, bitrate: 8_000_000,
+    baseline_profile: true, iframe_interval: 2, no_vd_system_decorations: true, disable_animations: false, screen_off: false,
+  },
 });
 
 const captureMode = ref(false);

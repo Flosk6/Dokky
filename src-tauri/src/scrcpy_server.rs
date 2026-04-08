@@ -37,6 +37,19 @@ pub struct VideoPacket {
 ///
 /// Reverse tunnel: PC listens on a port, device connects TO the PC.
 /// This is the default and most reliable mode.
+/// Extra video codec options for scrcpy-server.
+pub struct VideoCodecOptions {
+    pub iframe_interval: u32,
+}
+
+impl Default for VideoCodecOptions {
+    fn default() -> Self {
+        Self {
+            iframe_interval: 2,
+        }
+    }
+}
+
 pub async fn connect(
     adb: &Path,
     server_jar: &Path,
@@ -45,6 +58,7 @@ pub async fn connect(
     display_spec: &str,
     video_bit_rate: u32,
     max_fps: u32,
+    codec_options: &VideoCodecOptions,
 ) -> Result<ScrcpyConnection, DokkyError> {
     let scid = (Uuid::new_v4().as_u128() as u32) & 0x7FFF_FFFF;
 
@@ -87,7 +101,12 @@ pub async fn connect(
     log::info!("[scrcpy] Reverse tunnel set up: scrcpy_{:08x} -> tcp:{}", scid, local_port);
 
     // 4. Start scrcpy-server (NO tunnel_forward — uses reverse by default)
-    let server_cmd = format!(
+    // Build video_codec_options string
+    // Build video_codec_options for the encoder
+    let mut vco_parts: Vec<String> = Vec::new();
+    vco_parts.push(format!("i-frame-interval={}", codec_options.iframe_interval));
+
+    let mut server_cmd = format!(
         "CLASSPATH=/data/local/tmp/scrcpy-server.jar \
          app_process / com.genymobile.scrcpy.Server {} \
          scid={:08x} \
@@ -99,6 +118,12 @@ pub async fn connect(
          new_display={}",
         SCRCPY_VERSION, scid, max_fps, video_bit_rate, display_spec
     );
+
+    if !vco_parts.is_empty() {
+        server_cmd.push_str(&format!(" video_codec_options={}", vco_parts.join(",")));
+    }
+    // Note: screen_off_timeout is not used — it breaks touch input.
+    // Screen dimming is handled via ADB brightness commands instead.
     log::info!("[scrcpy] Starting server on device...");
 
     let mut server_process = Command::new(adb)

@@ -89,6 +89,54 @@ fn set_config(config: config_manager::AppConfig) -> Result<(), DokkyError> {
 }
 
 #[tauri::command]
+async fn set_device_animations(
+    paths: tauri::State<'_, BundledPaths>,
+    device_serial: String,
+    enabled: bool,
+) -> Result<(), DokkyError> {
+    let val = if enabled { "1.0" } else { "0" };
+    for setting in &["window_animation_scale", "transition_animation_scale", "animator_duration_scale"] {
+        let output = tokio::process::Command::new(&paths.adb)
+            .args(["-s", &device_serial, "shell", "settings", "put", "global", setting, val])
+            .output()
+            .await
+            .map_err(|_| DokkyError::AdbNotFound)?;
+        if !output.status.success() {
+            log::warn!("[adb] Failed to set {}: {}", setting, String::from_utf8_lossy(&output.stderr));
+        }
+    }
+    log::info!("[adb] Animations {} on {}", if enabled { "enabled" } else { "disabled" }, device_serial);
+    Ok(())
+}
+
+/// Set device screen brightness to minimum (0) or restore to auto.
+/// Unlike screen_off, this keeps the device awake and touch input working.
+#[tauri::command]
+async fn set_device_screen_dim(
+    paths: tauri::State<'_, BundledPaths>,
+    device_serial: String,
+    dim: bool,
+) -> Result<(), DokkyError> {
+    if dim {
+        // Switch to manual brightness and set to 0
+        tokio::process::Command::new(&paths.adb)
+            .args(["-s", &device_serial, "shell", "settings", "put", "system", "screen_brightness_mode", "0"])
+            .output().await.map_err(|_| DokkyError::AdbNotFound)?;
+        tokio::process::Command::new(&paths.adb)
+            .args(["-s", &device_serial, "shell", "settings", "put", "system", "screen_brightness", "0"])
+            .output().await.map_err(|_| DokkyError::AdbNotFound)?;
+        log::info!("[adb] Screen dimmed to minimum on {}", device_serial);
+    } else {
+        // Restore auto brightness
+        tokio::process::Command::new(&paths.adb)
+            .args(["-s", &device_serial, "shell", "settings", "put", "system", "screen_brightness_mode", "1"])
+            .output().await.map_err(|_| DokkyError::AdbNotFound)?;
+        log::info!("[adb] Screen brightness restored to auto on {}", device_serial);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn create_session(
     state: tauri::State<'_, SessionStore>,
     paths: tauri::State<'_, BundledPaths>,
@@ -98,11 +146,16 @@ async fn create_session(
     display_spec: Option<String>,
     video_bit_rate: Option<u32>,
     max_fps: Option<u32>,
+    iframe_interval: Option<u32>,
+    screen_off: Option<bool>,
 ) -> Result<session_manager::SessionInfo, DokkyError> {
     let spec = display_spec.unwrap_or_else(|| "1920x1080".to_string());
     let bitrate = video_bit_rate.unwrap_or(8_000_000);
     let fps = max_fps.unwrap_or(60);
     let name = display_name.unwrap_or_else(|| app_package.clone());
+    let codec_options = scrcpy_server::VideoCodecOptions {
+        iframe_interval: iframe_interval.unwrap_or(2),
+    };
     log::info!(
         "[cmd] create_session: device={}, app={}, name={}, display={}, bitrate={}, fps={}",
         device_serial, app_package, name, spec, bitrate, fps
@@ -116,6 +169,7 @@ async fn create_session(
         spec,
         bitrate,
         fps,
+        codec_options,
     )
     .await;
     match &result {
@@ -239,6 +293,8 @@ pub fn run() {
             remove_dofus_clone,
             get_config,
             set_config,
+            set_device_animations,
+            set_device_screen_dim,
             create_session,
             list_sessions,
             stop_session,

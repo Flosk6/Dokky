@@ -18,6 +18,8 @@ export function useSessions() {
     displaySpec?: string,
     videoBitRate?: number,
     maxFps?: number,
+    iframeInterval?: number,
+    screenOff?: boolean,
   ) {
     if (creating.value) return;
     creating.value = true;
@@ -29,6 +31,8 @@ export function useSessions() {
         displaySpec,
         videoBitRate,
         maxFps,
+        iframeInterval,
+        screenOff,
       });
       sessions.value.push(session);
       activeSessionId.value = session.id;

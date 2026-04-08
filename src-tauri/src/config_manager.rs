@@ -32,6 +32,67 @@ fn default_video_preset() -> String {
     "high".to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
+fn default_iframe_interval() -> u32 {
+    2
+}
+
+/// Video & performance settings. When preset is not "custom", these are ignored
+/// and the preset values are used instead.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoSettings {
+    /// Resolution width (e.g. 1920)
+    #[serde(default)]
+    pub width: u32,
+    /// Resolution height (e.g. 1080)
+    #[serde(default)]
+    pub height: u32,
+    /// DPI for virtual display
+    #[serde(default)]
+    pub dpi: u32,
+    /// Max FPS
+    #[serde(default)]
+    pub fps: u32,
+    /// Bitrate in bps
+    #[serde(default)]
+    pub bitrate: u32,
+    /// Use H.264 Baseline profile (no B-frames, less CPU)
+    #[serde(default = "default_true")]
+    pub baseline_profile: bool,
+    /// I-frame interval in seconds
+    #[serde(default = "default_iframe_interval")]
+    pub iframe_interval: u32,
+    /// Hide system decorations on virtual display
+    #[serde(default = "default_true")]
+    pub no_vd_system_decorations: bool,
+    /// Disable Android animations on device
+    #[serde(default)]
+    pub disable_animations: bool,
+    /// Turn off device screen to save battery
+    #[serde(default)]
+    pub screen_off: bool,
+}
+
+impl Default for VideoSettings {
+    fn default() -> Self {
+        Self {
+            width: 1920,
+            height: 1080,
+            dpi: 240,
+            fps: 60,
+            bitrate: 8_000_000,
+            baseline_profile: true,
+            iframe_interval: 2,
+            no_vd_system_decorations: true,
+            disable_animations: false,
+            screen_off: false,
+        }
+    }
+}
+
 /// Navigation shortcuts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NavigationShortcuts {
@@ -59,6 +120,8 @@ pub struct AppConfig {
     pub game_actions: Vec<GameAction>,
     #[serde(default = "default_video_preset")]
     pub video_preset: String,
+    #[serde(default)]
+    pub video_settings: VideoSettings,
 }
 
 impl Default for AppConfig {
@@ -67,6 +130,7 @@ impl Default for AppConfig {
             navigation: NavigationShortcuts::default(),
             game_actions: Vec::new(),
             video_preset: default_video_preset(),
+            video_settings: VideoSettings::default(),
         }
     }
 }
