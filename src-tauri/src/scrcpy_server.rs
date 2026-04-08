@@ -112,6 +112,7 @@ pub async fn connect(
          scid={:08x} \
          log_level=info \
          audio=false \
+         stay_awake=true \
          video_codec=h264 \
          max_fps={} \
          video_bit_rate={} \
@@ -197,6 +198,7 @@ pub async fn connect(
         log::info!("[scrcpy] Sending START_APP for '{}'", app_package);
         send_start_app(&control_arc, app_package).await?;
     }
+
 
     log::info!(
         "[scrcpy] Fully connected! device='{}' {}x{} port={}",

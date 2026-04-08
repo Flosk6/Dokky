@@ -18,7 +18,7 @@ const emit = defineEmits<{
   closeShortcuts: [];
 }>();
 
-const { config, captureMode, captureCallback, endCapture, registerTouchSender } = useShortcuts();
+const { captureMode, captureCallback, endCapture, registerSession, unregisterSession } = useShortcuts();
 
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const wrapRef = ref<HTMLElement | null>(null);
@@ -112,28 +112,6 @@ function sendTouch(action: number, event: MouseEvent) {
   }).catch(() => {});
 }
 
-/// Send a tap at a random position within a normalized zone (simulates human-like taps).
-function sendTapInZone(cx: number, cy: number, w: number, h: number) {
-  // Randomize within the zone
-  const normX = cx + (Math.random() - 0.5) * w;
-  const normY = cy + (Math.random() - 0.5) * h;
-  const x = Math.round(Math.max(0, Math.min(1, normX)) * props.width);
-  const y = Math.round(Math.max(0, Math.min(1, normY)) * props.height);
-  // Simulate DOWN then UP with slight random delay (30-80ms)
-  invoke("send_touch", { sessionId: props.sessionId, action: 0, x, y, width: props.width, height: props.height }).catch(() => {});
-  setTimeout(() => {
-    invoke("send_touch", { sessionId: props.sessionId, action: 1, x, y, width: props.width, height: props.height }).catch(() => {});
-  }, 30 + Math.random() * 50);
-}
-
-// Register this player's touch sender for game action shortcuts
-registerTouchSender((key: string) => {
-  const action = config.value.game_actions.find((a) => a.key.toLowerCase() === key.toLowerCase());
-  if (action) {
-    sendTapInZone(action.x, action.y, action.w ?? 0.02, action.h ?? 0.02);
-  }
-});
-
 function onMouseDown(e: MouseEvent) {
   // Capture mode: record normalized coordinates
   if (captureMode.value && captureCallback.value) {
@@ -161,71 +139,7 @@ function onMouseMove(e: MouseEvent) {
   }
 }
 
-// --- Keyboard handling ---
-// Map browser key names to Android keycodes
-const KEY_MAP: Record<string, number> = {
-  Enter: 66,
-  Backspace: 67,
-  Delete: 112,
-  Tab: 61,
-  Escape: 111,
-  ArrowUp: 19,
-  ArrowDown: 20,
-  ArrowLeft: 21,
-  ArrowRight: 22,
-  Home: 122,
-  End: 123,
-};
-
-function getMetaState(e: KeyboardEvent): number {
-  let meta = 0;
-  if (e.shiftKey) meta |= 0x1;
-  if (e.altKey) meta |= 0x2;
-  if (e.ctrlKey || e.metaKey) meta |= 0x1000;
-  return meta;
-}
-
-function onKeyDown(e: KeyboardEvent) {
-  if (captureMode.value) return;
-  // Don't intercept browser/app shortcuts
-  if (e.ctrlKey || e.metaKey) return;
-
-  const keycode = KEY_MAP[e.key];
-  if (keycode) {
-    e.preventDefault();
-    invoke("send_key", {
-      sessionId: props.sessionId,
-      action: 0, // ACTION_DOWN
-      keycode,
-      repeat: 0,
-      metastate: getMetaState(e),
-    }).catch(() => {});
-  } else if (e.key.length === 1) {
-    // Printable character → inject as text
-    e.preventDefault();
-    invoke("send_text", {
-      sessionId: props.sessionId,
-      text: e.key,
-    }).catch(() => {});
-  }
-}
-
-function onKeyUp(e: KeyboardEvent) {
-  if (captureMode.value) return;
-  if (e.ctrlKey || e.metaKey) return;
-
-  const keycode = KEY_MAP[e.key];
-  if (keycode) {
-    e.preventDefault();
-    invoke("send_key", {
-      sessionId: props.sessionId,
-      action: 1, // ACTION_UP
-      keycode,
-      repeat: 0,
-      metastate: getMetaState(e),
-    }).catch(() => {});
-  }
-}
+// Keyboard handling is centralized in useShortcuts (auto-detects Android keyboard state)
 
 function setupDecoder() {
   // Decoder is set up inside startStreaming with rAF-based rendering
@@ -346,8 +260,8 @@ async function startStreaming() {
 }
 
 onMounted(() => {
+  registerSession(props.sessionId, props.width, props.height);
   startStreaming();
-  // Track container size to scale canvas properly
   if (wrapRef.value) {
     resizeObserver = new ResizeObserver(() => updateCanvasSize());
     resizeObserver.observe(wrapRef.value);
@@ -357,6 +271,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   streaming = false;
+  unregisterSession(props.sessionId);
   if (decoder && decoder.state !== "closed") {
     decoder.close();
   }
@@ -377,8 +292,6 @@ onUnmounted(() => {
         @mousedown="onMouseDown"
         @mouseup="onMouseUp"
         @mousemove="onMouseMove"
-        @keydown="onKeyDown"
-        @keyup="onKeyUp"
         @contextmenu.prevent
       />
       <ShortcutOverlay

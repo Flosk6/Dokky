@@ -88,6 +88,27 @@ fn set_config(config: config_manager::AppConfig) -> Result<(), DokkyError> {
     config_manager::save_config(&config)
 }
 
+/// Check if the Android soft keyboard is currently visible on the device.
+#[tauri::command]
+async fn is_keyboard_visible(
+    paths: tauri::State<'_, BundledPaths>,
+    device_serial: String,
+) -> Result<bool, DokkyError> {
+    // Use grep on device side to minimize data transfer and speed up the check
+    let output = tokio::process::Command::new(&paths.adb)
+        .args(["-s", &device_serial, "shell", "dumpsys input_method | grep 'mServedInputConnection='"])
+        .output()
+        .await
+        .map_err(|_| DokkyError::AdbNotFound)?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // mServedInputConnection=null → no text field focused
+    // mServedInputConnection=RemoteInputConnectionImpl{...} → text field has focus
+    let has_input = !stdout.is_empty()
+        && !stdout.contains("mServedInputConnection=null");
+    Ok(has_input)
+}
+
 #[tauri::command]
 async fn set_device_animations(
     paths: tauri::State<'_, BundledPaths>,
@@ -147,7 +168,6 @@ async fn create_session(
     video_bit_rate: Option<u32>,
     max_fps: Option<u32>,
     iframe_interval: Option<u32>,
-    screen_off: Option<bool>,
 ) -> Result<session_manager::SessionInfo, DokkyError> {
     let spec = display_spec.unwrap_or_else(|| "1920x1080".to_string());
     let bitrate = video_bit_rate.unwrap_or(8_000_000);
@@ -265,6 +285,7 @@ async fn send_text(
     scrcpy_server::send_text(&control, &text).await
 }
 
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let store = SessionStore::new();
@@ -293,6 +314,7 @@ pub fn run() {
             remove_dofus_clone,
             get_config,
             set_config,
+            is_keyboard_visible,
             set_device_animations,
             set_device_screen_dim,
             create_session,

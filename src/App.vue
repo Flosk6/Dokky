@@ -61,7 +61,6 @@ async function handleCreateSession(
       s.bitrate,
       s.fps,
       s.iframe_interval,
-      s.screen_off,
     );
     showNewSessionDialog.value = false;
     showShortcuts.value = false;
@@ -85,12 +84,18 @@ function handleCloseActive() {
   }
 }
 
-useShortcuts({
+const { setActiveSession } = useShortcuts({
   newSession: () => (showNewSessionDialog.value = true),
   closeActive: handleCloseActive,
   switchByIndex,
   switchNext,
   switchPrev,
+});
+
+// Keep useShortcuts in sync with the active session for keyboard handling
+watch(activeSessionId, (sid) => {
+  const session = sessions.value.find((s) => s.id === sid);
+  setActiveSession(sid, session?.device_serial ?? null);
 });
 
 // Clones are auto-loaded by useClones() when devices connect

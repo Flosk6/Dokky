@@ -19,7 +19,6 @@ export function useSessions() {
     videoBitRate?: number,
     maxFps?: number,
     iframeInterval?: number,
-    screenOff?: boolean,
   ) {
     if (creating.value) return;
     creating.value = true;
@@ -32,7 +31,6 @@ export function useSessions() {
         videoBitRate,
         maxFps,
         iframeInterval,
-        screenOff,
       });
       sessions.value.push(session);
       activeSessionId.value = session.id;
