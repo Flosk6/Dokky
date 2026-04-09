@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useDevices } from "./composables/useDevices";
 import { useSessions } from "./composables/useSessions";
@@ -7,6 +7,7 @@ import { useShortcuts } from "./composables/useShortcuts";
 import { useToast } from "./composables/useToast";
 import { useClones } from "./composables/useClones";
 import { useVideoPreset } from "./composables/useVideoPreset";
+import { useLicense } from "./composables/useLicense";
 import TabBar from "./components/TabBar.vue";
 import ActionSidebar from "./components/ActionSidebar.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
@@ -34,19 +35,35 @@ watch(
 const { error: toastError, success: toastSuccess } = useToast();
 const { iconMap } = useClones(devices);
 const { effectiveSettings, displaySpec } = useVideoPreset();
+const { isPro, checkLicense } = useLicense();
 
 const showNewSessionDialog = ref(false);
-const showSettings = ref(false);
+const activePanel = ref<string | null>(null);
 const showShortcuts = ref(false);
+
+function togglePanel(panel: string) {
+  activePanel.value = activePanel.value === panel ? null : panel;
+}
+
+// Check license on startup
+onMounted(() => checkLicense());
 
 async function handleCreateSession(
   deviceSerial: string,
   appPackage: string,
   displayName: string,
 ) {
+  // Multi-device gate: check if creating on a different device than existing sessions
+  if (!isPro.value && sessions.value.length > 0) {
+    const existingDevice = sessions.value[0].device_serial;
+    if (deviceSerial !== existingDevice) {
+      toastError("Multi-device est une fonctionnalité Pro");
+      return;
+    }
+  }
+
   const s = effectiveSettings.value;
   try {
-    // Apply device-side optimizations before creating the session
     if (s.disable_animations) {
       await invoke("set_device_animations", { deviceSerial, enabled: false });
     }
@@ -158,15 +175,16 @@ watch(activeSessionId, (sid) => {
 
     <!-- Sidebar -->
     <ActionSidebar
+      :active-panel="activePanel"
       @toggle-shortcuts="showShortcuts = !showShortcuts"
-      @toggle-settings="showSettings = !showSettings"
+      @open-panel="togglePanel"
     />
 
-    <!-- Overlays -->
+    <!-- Panels -->
     <SettingsPanel
-      :visible="showSettings"
+      :panel="activePanel"
       :devices="devices"
-      @close="showSettings = false"
+      @close="activePanel = null"
     />
 
     <NewSessionDialog

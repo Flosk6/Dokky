@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig, GameAction } from "../types";
+import { useLicense } from "./useLicense";
 
 interface NavigationActions {
   newSession: () => void;
@@ -153,8 +154,9 @@ function handleKeydown(e: KeyboardEvent) {
     return;
   }
 
-  // Default mode: game action shortcuts
-  if (!ctrl && !e.altKey) {
+  // Default mode: game action shortcuts (Pro only)
+  const { isPro } = useLicense();
+  if (!ctrl && !e.altKey && isPro.value) {
     const action = config.value.game_actions.find(
       (a) => a.key.toLowerCase() === e.key.toLowerCase()
     );

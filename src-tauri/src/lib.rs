@@ -2,6 +2,7 @@ mod apk_manager;
 mod config_manager;
 mod device_manager;
 mod error;
+mod license_manager;
 mod paths;
 mod scrcpy_server;
 mod session_manager;
@@ -155,6 +156,21 @@ async fn set_device_screen_dim(
         log::info!("[adb] Screen brightness restored to auto on {}", device_serial);
     }
     Ok(())
+}
+
+#[tauri::command]
+async fn check_license() -> license_manager::LicenseStatus {
+    license_manager::validate_license().await
+}
+
+#[tauri::command]
+async fn activate_license(license_key: String) -> license_manager::LicenseStatus {
+    license_manager::activate_license(&license_key).await
+}
+
+#[tauri::command]
+async fn deactivate_license() -> license_manager::LicenseStatus {
+    license_manager::deactivate_license().await
 }
 
 #[tauri::command]
@@ -314,6 +330,9 @@ pub fn run() {
             remove_dofus_clone,
             get_config,
             set_config,
+            check_license,
+            activate_license,
+            deactivate_license,
             is_keyboard_visible,
             set_device_animations,
             set_device_screen_dim,

@@ -6,11 +6,12 @@ import { useToast } from "../composables/useToast";
 import { useClones } from "../composables/useClones";
 import { useVideoPreset } from "../composables/useVideoPreset";
 import { useShortcuts } from "../composables/useShortcuts";
+import { useLicense } from "../composables/useLicense";
 import ConfirmModal from "./ConfirmModal.vue";
 import Loader from "./Loader.vue";
 
 const props = defineProps<{
-  visible: boolean;
+  panel: string | null;
   devices: Device[];
 }>();
 
@@ -18,11 +19,12 @@ defineEmits<{
   close: [];
 }>();
 
+const visible = computed(() => !!props.panel);
+
 const { success: toastSuccess, error: toastError } = useToast();
 const devicesRef = computed(() => props.devices);
 const { getClones, isLoading, refreshDevice } = useClones(devicesRef);
 
-const activeTab = ref<"devices" | "settings">("devices");
 const selectedDeviceSerial = ref("");
 
 // Clone form
@@ -43,6 +45,8 @@ const {
   VIDEO_PRESETS,
 } = useVideoPreset();
 const { config: shortcutConfig, saveConfig } = useShortcuts();
+const { isPro, displayKey, licenseError, loading: licenseLoading, activate, deactivate } = useLicense();
+const licenseKeyInput = ref("");
 
 // Editable nav shortcut
 const editingNav = ref<string | null>(null);
@@ -185,31 +189,18 @@ function hideTooltip() {
 
 <template>
   <Transition name="panel">
-    <div v-if="visible" class="panel-overlay" @click.self="$emit('close')">
+    <div v-if="visible" class="panel-overlay">
       <div class="panel">
-        <!-- Header with tabs -->
+        <!-- Header -->
         <div class="panel-header">
-          <div class="panel-tabs">
-            <button
-              class="panel-tab"
-              :class="{ active: activeTab === 'devices' }"
-              @click="activeTab = 'devices'"
-            >
-              Devices
-            </button>
-            <button
-              class="panel-tab"
-              :class="{ active: activeTab === 'settings' }"
-              @click="activeTab = 'settings'"
-            >
-              Général
-            </button>
-          </div>
+          <span class="panel-title">
+            {{ panel === 'devices' ? 'Devices & Clones' : panel === 'performance' ? 'Performance' : panel === 'account' ? 'Compte' : 'Paramètres' }}
+          </span>
           <button class="panel-close" @click="$emit('close')">&times;</button>
         </div>
 
-        <!-- DEVICES TAB -->
-        <div v-if="activeTab === 'devices'" class="panel-body">
+        <!-- DEVICES -->
+        <div v-if="panel === 'devices'" class="panel-body">
           <!-- Device selector -->
           <div class="device-list">
             <div
@@ -285,8 +276,8 @@ function hideTooltip() {
           </div>
         </div>
 
-        <!-- SETTINGS TAB -->
-        <div v-if="activeTab === 'settings'" class="panel-body">
+        <!-- PERFORMANCE -->
+        <div v-if="panel === 'performance'" class="panel-body">
           <!-- Presets -->
           <div class="section-title">Performance</div>
           <div class="preset-grid">
@@ -445,8 +436,58 @@ function hideTooltip() {
             />
           </label>
 
+        </div>
+
+        <!-- ACCOUNT -->
+        <div v-if="panel === 'account'" class="panel-body">
+          <div class="section-title">Licence Pro</div>
+          <div v-if="isPro" class="license-active">
+            <div class="license-badge">PRO</div>
+            <div class="license-info">
+              <span class="setting-label">Licence active</span>
+              <span class="setting-value">{{ displayKey }}</span>
+            </div>
+            <button class="btn-sm" :disabled="licenseLoading" @click="deactivate()">
+              Désactiver
+            </button>
+          </div>
+          <div v-else class="license-form">
+            <p class="license-desc">
+              Débloquez le multi-device et les raccourcis clavier.
+            </p>
+            <div class="license-input-row">
+              <input
+                v-model="licenseKeyInput"
+                class="input"
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                @keyup.enter="activate(licenseKeyInput)"
+              />
+              <button
+                class="btn-sm accent"
+                :disabled="!licenseKeyInput.trim() || licenseLoading"
+                @click="activate(licenseKeyInput)"
+              >
+                {{ licenseLoading ? '...' : 'Activer' }}
+              </button>
+            </div>
+            <p v-if="licenseError" class="license-error">{{ licenseError }}</p>
+          </div>
+
           <div class="divider" />
 
+          <div class="section-title">À propos</div>
+          <div class="setting-row">
+            <span class="setting-label">Dokky</span>
+            <span class="setting-value">v0.1.0</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">scrcpy</span>
+            <span class="setting-value">3.3.4</span>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div v-if="panel === 'settings'" class="panel-body">
           <div class="section-title">Navigation</div>
           <div
             v-for="(navKey, navId) in shortcutConfig.navigation"
@@ -466,18 +507,6 @@ function hideTooltip() {
             />
             <span class="action-label">{{ navLabels[navId as string] ?? navId }}</span>
             <span class="action-edit-hint">clic pour modifier</span>
-          </div>
-
-          <div class="divider" />
-
-          <div class="section-title">À propos</div>
-          <div class="setting-row">
-            <span class="setting-label">Dokky</span>
-            <span class="setting-value">v0.1.0</span>
-          </div>
-          <div class="setting-row">
-            <span class="setting-label">scrcpy</span>
-            <span class="setting-value">3.3.4</span>
           </div>
         </div>
       </div>
@@ -503,31 +532,31 @@ function hideTooltip() {
 </template>
 
 <style scoped>
-/* Panel overlay + slide */
+/* Panel — slides in from right, next to sidebar */
 .panel-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 100;
-  display: flex;
-  justify-content: flex-end;
+  position: absolute;
+  top: 0;
+  right: var(--sidebar-width);
+  bottom: 0;
+  z-index: 50;
+  pointer-events: none;
 }
 
 .panel {
-  width: 340px;
+  width: 320px;
   height: 100%;
   background: var(--bg-secondary);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  pointer-events: auto;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.3);
 }
 
-.panel-enter-active { transition: all 0.25s ease-out; }
-.panel-leave-active { transition: all 0.2s ease-in; }
-.panel-enter-from .panel,
-.panel-leave-to .panel { transform: translateX(100%); }
+.panel-enter-active { transition: opacity 0.15s ease-out; }
+.panel-leave-active { transition: opacity 0.1s ease-in; }
 .panel-enter-from,
-.panel-leave-to { background: rgba(0, 0, 0, 0); }
+.panel-leave-to { opacity: 0; }
 
 /* Header */
 .panel-header {
@@ -540,28 +569,11 @@ function hideTooltip() {
   flex-shrink: 0;
 }
 
-.panel-tabs {
-  display: flex;
-  height: 100%;
-}
-
-.panel-tab {
+.panel-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
   padding: 0 16px;
-  height: 100%;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.panel-tab:hover { color: var(--text-primary); }
-.panel-tab.active {
-  color: #fff;
-  border-bottom-color: var(--accent);
 }
 
 .panel-close {
@@ -978,6 +990,59 @@ function hideTooltip() {
 }
 
 .help-tip:hover { background: var(--accent); color: #fff; }
+
+/* License section */
+.license-active {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.license-badge {
+  padding: 2px 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.license-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.license-info .setting-label { display: block; }
+.license-info .setting-value { display: block; font-size: 0.7rem; }
+
+.license-form { padding: 4px 0; }
+
+.license-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.license-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.license-input-row .input {
+  flex: 1;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+}
+
+.license-error {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-top: 6px;
+}
 </style>
 
 <style>
