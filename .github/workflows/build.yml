@@ -1,0 +1,163 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            name: macOS-arm64
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            name: macOS-x64
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: Windows-x64
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install dependencies (npm)
+        run: npm ci
+
+      # --- Collect external dependencies ---
+
+      - name: Setup Java (for jlink + apktool/apksigner)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build minimal JRE (jlink)
+        shell: bash
+        run: |
+          MODULES="java.base,java.desktop,java.logging,jdk.crypto.ec,java.security.jgss,java.naming"
+          jlink \
+            --add-modules "$MODULES" \
+            --output src-tauri/resources/jre \
+            --no-header-files \
+            --no-man-pages \
+            --strip-debug \
+            --compress=zip-6
+          # Remove legal dir (causes Tauri build issues) and symlinks
+          rm -rf src-tauri/resources/jre/legal
+          find src-tauri/resources/jre -type l | while read link; do
+            target=$(readlink -f "$link" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$link'))")
+            rm "$link"
+            cp "$target" "$link"
+          done
+          echo "JRE size: $(du -sh src-tauri/resources/jre | cut -f1)"
+
+      - name: Collect scrcpy-server
+        shell: bash
+        run: |
+          mkdir -p src-tauri/resources
+          SCRCPY_VERSION="3.3.4"
+          # scrcpy-server is built from the official scrcpy repo releases
+          curl -L "https://github.com/nickel-fang/scrcpy-server/releases/download/v${SCRCPY_VERSION}/scrcpy-server" \
+            -o src-tauri/resources/scrcpy-server.jar && echo "Downloaded scrcpy-server" || \
+          echo "WARNING: Auto-download failed. Place scrcpy-server manually in src-tauri/resources/scrcpy-server.jar"
+
+      - name: Collect adb (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p src-tauri/resources/bin
+          curl -L https://dl.google.com/android/repository/platform-tools-latest-darwin.zip -o /tmp/pt.zip
+          unzip -o /tmp/pt.zip -d /tmp/pt
+          cp /tmp/pt/platform-tools/adb src-tauri/resources/bin/adb
+          chmod +x src-tauri/resources/bin/adb
+
+      - name: Collect adb (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p src-tauri/resources/bin
+          curl -L https://dl.google.com/android/repository/platform-tools-latest-windows.zip -o /tmp/pt.zip
+          unzip -o /tmp/pt.zip -d /tmp/pt
+          cp /tmp/pt/platform-tools/adb.exe src-tauri/resources/bin/adb.exe
+          cp /tmp/pt/platform-tools/AdbWinApi.dll src-tauri/resources/bin/AdbWinApi.dll
+          cp /tmp/pt/platform-tools/AdbWinUsbApi.dll src-tauri/resources/bin/AdbWinUsbApi.dll
+
+      - name: Collect apktool
+        shell: bash
+        run: |
+          APKTOOL_VERSION="2.11.1"
+          curl -L "https://github.com/nickel-fang/apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar" \
+            -o src-tauri/resources/apktool.jar && echo "Downloaded apktool" || \
+          curl -L "https://bitbucket.org/nickel_fang/apktool/downloads/apktool_${APKTOOL_VERSION}.jar" \
+            -o src-tauri/resources/apktool.jar && echo "Downloaded apktool (fallback)" || \
+          echo "WARNING: Auto-download failed. Place apktool.jar manually in src-tauri/resources/"
+
+      - name: Collect apksigner + zipalign (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # Download Android build-tools for apksigner
+          curl -L https://dl.google.com/android/repository/build-tools_r34.0.0-macosx.zip -o /tmp/bt.zip || true
+          if [ -f /tmp/bt.zip ]; then
+            unzip -o /tmp/bt.zip -d /tmp/bt
+            BT_DIR=$(find /tmp/bt -name "apksigner" -type f | head -1 | xargs dirname)
+            [ -f "$BT_DIR/lib/apksigner.jar" ] && cp "$BT_DIR/lib/apksigner.jar" src-tauri/resources/apksigner.jar
+            [ -f "$BT_DIR/zipalign" ] && cp "$BT_DIR/zipalign" src-tauri/resources/bin/zipalign && chmod +x src-tauri/resources/bin/zipalign
+          fi
+
+      - name: Collect apksigner + zipalign (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -L https://dl.google.com/android/repository/build-tools_r34.0.0-windows.zip -o /tmp/bt.zip || true
+          if [ -f /tmp/bt.zip ]; then
+            unzip -o /tmp/bt.zip -d /tmp/bt
+            BT_DIR=$(find /tmp/bt -name "apksigner.bat" -type f | head -1 | xargs dirname)
+            [ -f "$BT_DIR/lib/apksigner.jar" ] && cp "$BT_DIR/lib/apksigner.jar" src-tauri/resources/apksigner.jar
+            [ -f "$BT_DIR/zipalign.exe" ] && cp "$BT_DIR/zipalign.exe" src-tauri/resources/bin/zipalign.exe
+          fi
+
+      - name: Verify resources
+        shell: bash
+        run: |
+          echo "=== Resources ==="
+          ls -lh src-tauri/resources/ 2>/dev/null || true
+          ls -lh src-tauri/resources/bin/ 2>/dev/null || true
+          ls -lh src-tauri/resources/jre/bin/ 2>/dev/null || true
+
+      # --- Build ---
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Dokky ${{ github.ref_name }}"
+          releaseBody: "Download Dokky for your platform."
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.target }}
