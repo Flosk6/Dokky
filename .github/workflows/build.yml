@@ -111,29 +111,26 @@ jobs:
             -o src-tauri/resources/apktool.jar && echo "Downloaded apktool (fallback)" || \
           echo "WARNING: Auto-download failed. Place apktool.jar manually in src-tauri/resources/"
 
-      - name: Collect apksigner + zipalign (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          # Download Android build-tools for apksigner
-          curl -L https://dl.google.com/android/repository/build-tools_r34.0.0-macosx.zip -o /tmp/bt.zip || true
-          if [ -f /tmp/bt.zip ]; then
-            unzip -o /tmp/bt.zip -d /tmp/bt
-            BT_DIR=$(find /tmp/bt -name "apksigner" -type f | head -1 | xargs dirname)
-            [ -f "$BT_DIR/lib/apksigner.jar" ] && cp "$BT_DIR/lib/apksigner.jar" src-tauri/resources/apksigner.jar
-            [ -f "$BT_DIR/zipalign" ] && cp "$BT_DIR/zipalign" src-tauri/resources/bin/zipalign && chmod +x src-tauri/resources/bin/zipalign
-          fi
+      - name: Setup Android SDK (for apksigner + zipalign)
+        uses: android-actions/setup-android@v3
 
-      - name: Collect apksigner + zipalign (Windows)
-        if: runner.os == 'Windows'
+      - name: Collect apksigner + zipalign
         shell: bash
         run: |
-          curl -L https://dl.google.com/android/repository/build-tools_r34.0.0-windows.zip -o /tmp/bt.zip || true
-          if [ -f /tmp/bt.zip ]; then
-            unzip -o /tmp/bt.zip -d /tmp/bt
-            BT_DIR=$(find /tmp/bt -name "apksigner.bat" -type f | head -1 | xargs dirname)
-            [ -f "$BT_DIR/lib/apksigner.jar" ] && cp "$BT_DIR/lib/apksigner.jar" src-tauri/resources/apksigner.jar
-            [ -f "$BT_DIR/zipalign.exe" ] && cp "$BT_DIR/zipalign.exe" src-tauri/resources/bin/zipalign.exe
+          # Find build-tools installed by setup-android
+          BT_DIR=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)
+          echo "Build tools dir: $BT_DIR"
+          if [ -f "$BT_DIR/lib/apksigner.jar" ]; then
+            cp "$BT_DIR/lib/apksigner.jar" src-tauri/resources/apksigner.jar
+            echo "Copied apksigner.jar"
+          fi
+          if [ -f "$BT_DIR/zipalign" ]; then
+            cp "$BT_DIR/zipalign" src-tauri/resources/bin/zipalign
+            chmod +x src-tauri/resources/bin/zipalign
+            echo "Copied zipalign"
+          elif [ -f "$BT_DIR/zipalign.exe" ]; then
+            cp "$BT_DIR/zipalign.exe" src-tauri/resources/bin/zipalign.exe
+            echo "Copied zipalign.exe"
           fi
 
       - name: Verify resources
