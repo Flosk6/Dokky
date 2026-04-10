@@ -14,6 +14,7 @@ import SettingsPanel from "./components/SettingsPanel.vue";
 import NewSessionDialog from "./components/NewSessionDialog.vue";
 import VideoPlayer from "./components/VideoPlayer.vue";
 import Toast from "./components/Toast.vue";
+import ProModal from "./components/ProModal.vue";
 
 const { devices, error: devicesError, setSlowPolling } = useDevices();
 const {
@@ -40,6 +41,15 @@ const { isPro, checkLicense } = useLicense();
 const showNewSessionDialog = ref(false);
 const activePanel = ref<string | null>(null);
 const showShortcuts = ref(false);
+const proModalFeature = ref<string | null>(null);
+
+function handleShortcutToggle() {
+  if (isPro.value) {
+    showShortcuts.value = !showShortcuts.value;
+  } else {
+    proModalFeature.value = "Raccourcis clavier";
+  }
+}
 
 function togglePanel(panel: string) {
   activePanel.value = activePanel.value === panel ? null : panel;
@@ -53,11 +63,11 @@ async function handleCreateSession(
   appPackage: string,
   displayName: string,
 ) {
-  // Multi-device gate: check if creating on a different device than existing sessions
+  // Multi-device gate
   if (!isPro.value && sessions.value.length > 0) {
     const existingDevice = sessions.value[0].device_serial;
     if (deviceSerial !== existingDevice) {
-      toastError("Multi-device est une fonctionnalité Pro");
+      proModalFeature.value = "Multi-device";
       return;
     }
   }
@@ -176,7 +186,7 @@ watch(activeSessionId, (sid) => {
     <!-- Sidebar -->
     <ActionSidebar
       :active-panel="activePanel"
-      @toggle-shortcuts="showShortcuts = !showShortcuts"
+      @toggle-shortcuts="handleShortcutToggle"
       @open-panel="togglePanel"
     />
 
@@ -192,6 +202,12 @@ watch(activeSessionId, (sid) => {
       :devices="devices.filter((d) => d.status === 'device')"
       @close="showNewSessionDialog = false"
       @create="handleCreateSession"
+    />
+
+    <ProModal
+      :visible="!!proModalFeature"
+      :feature="proModalFeature ?? ''"
+      @close="proModalFeature = null"
     />
 
     <Toast />

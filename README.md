@@ -1,6 +1,6 @@
 # Dokky
 
-Multi-compte Dofus Touch sur PC. Jouez plusieurs comptes simultanément depuis une seule application.
+Application de mirroring Android dédiée et optimisée pour Dofus Touch. Gratuit et open source.
 
 <p align="center">
   <img src="src/assets/dokky-logo.png" alt="Dokky" width="128" />
@@ -8,11 +8,12 @@ Multi-compte Dofus Touch sur PC. Jouez plusieurs comptes simultanément depuis u
 
 ## Fonctionnalités
 
+- **Mirroring USB** : Affichez et contrôlez Dofus Touch directement sur votre PC via USB
 - **Multi-instance** : Ouvrez plusieurs instances de Dofus Touch sur un même device Android
 - **Interface à onglets** : Naviguez entre vos comptes comme des onglets Chrome
 - **Vidéo intégrée** : Rendu H.264 directement dans l'app via WebCodecs (pas de fenêtre scrcpy)
-- **Clonage APK** : Créez des clones de Dofus Touch avec noms et icônes personnalisés
-- **Raccourcis clavier** : Mappez des touches à des zones de l'écran (sorts, actions) avec support appui long *
+- **Clonage APK** ¹ : Créez des clones de Dofus Touch avec noms et icônes personnalisés
+- **Raccourcis clavier** ² : Mappez des touches à des zones de l'écran (sorts, actions) *
 - **Presets de performance** : Ultra, High, Medium, Low ou configuration personnalisée
 - **Multi-device** : Gérez plusieurs téléphones Android simultanément *
 
@@ -28,13 +29,17 @@ Multi-compte Dofus Touch sur PC. Jouez plusieurs comptes simultanément depuis u
 
 ### macOS
 
-1. Téléchargez `Dokky-x.x.x-macos.zip` depuis les [Releases](../../releases)
-2. Décompressez et glissez `Dokky.app` dans `/Applications`
+1. Téléchargez le `.dmg` depuis les [Releases](https://github.com/Flosk6/Dokky/releases/latest)
+   - **Apple Silicon** (M1/M2/M3/M4) : `Dokky_x.x.x_aarch64.dmg`
+   - **Intel** : `Dokky_x.x.x_x64.dmg`
+2. Ouvrez le `.dmg` et glissez Dokky dans `/Applications`
 3. Au premier lancement : clic droit > Ouvrir (pour contourner Gatekeeper)
 
 ### Windows
 
-1. Téléchargez `Dokky-x.x.x-windows.msi` depuis les [Releases](../../releases)
+1. Téléchargez l'installeur depuis les [Releases](https://github.com/Flosk6/Dokky/releases/latest)
+   - `Dokky_x.x.x_x64-setup.exe` (recommandé)
+   - ou `Dokky_x.x.x_x64_en-US.msi`
 2. Lancez l'installeur
 
 ## Utilisation
@@ -56,7 +61,7 @@ Multi-compte Dofus Touch sur PC. Jouez plusieurs comptes simultanément depuis u
 | `Ctrl+Tab` | Onglet suivant |
 | `Ctrl+Shift+Tab` | Onglet précédent |
 
-### Clonage de comptes
+### Clonage de comptes ¹
 
 Pour jouer plusieurs comptes, vous devez créer des **clones** de Dofus Touch :
 
@@ -66,7 +71,7 @@ Pour jouer plusieurs comptes, vous devez créer des **clones** de Dofus Touch :
 4. Attendez le clonage (~30 secondes)
 5. Le clone apparaît dans la liste et peut être lancé comme une instance séparée
 
-### Raccourcis en jeu (Pro)
+### Raccourcis en jeu ² (Pro)
 
 1. Cliquez sur l'icône **touche clavier** dans la sidebar
 2. Cliquez sur une zone vide ou dessinez une zone sur l'écran
@@ -86,17 +91,17 @@ Ouvrez le panneau **Performance** (icône sliders) pour ajuster :
 
 ## Licence Pro
 
-Dokky est gratuit pour jouer en multi-instance sur un seul device. La licence Pro débloque :
+Dokky est gratuit pour le mirroring multi-instance sur un seul device. La licence Pro débloque :
 
 - Multi-device (plusieurs téléphones)
-- Raccourcis clavier
+- Raccourcis clavier ²
 
-Prix : 2€/mois ou 20€/an
+Prix : 1,99€/mois ou 19,99€/an
 
 ## Développement
 
 ```bash
-# Pré-requis : Node.js 20+, Rust 1.77+, adb, scrcpy
+# Pré-requis : Node.js 22+, Rust 1.77+, adb, scrcpy
 
 # Installer les dépendances
 npm install
@@ -124,6 +129,12 @@ cargo tauri build
 - La saisie de texte dans le jeu (chat) est bufférisée sur les virtual displays Android — le texte apparaît au refocus du champ. C'est une limitation Android, pas un bug Dokky.
 - Les performances dépendent du CPU/GPU du téléphone, de la bande passante USB, et du nombre d'instances
 
+## Avertissements
+
+¹ Le clonage d'application est toléré par Ankama mais n'est pas officiellement supporté. Dokky n'est pas affilié à Ankama.
+
+² L'utilisation de raccourcis clavier ou macros est contraire aux CGU d'Ankama. Dokky n'est en aucun cas responsable des sanctions pouvant en découler. Utilisation à vos risques.
+
 ## Licence
 
-Ce projet est open source. Voir [LICENSE](LICENSE) pour les détails.
+Ce projet est source-available sous [Business Source License 1.1](LICENSE).

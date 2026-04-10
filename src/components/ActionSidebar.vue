@@ -24,9 +24,8 @@ function toggle(panel: string) {
       <!-- Shortcuts -->
       <button
         class="sidebar-btn"
-        :class="{ disabled: !isPro }"
         :title="isPro ? 'Raccourcis clavier' : 'Raccourcis (Pro)'"
-        @click="isPro && $emit('toggleShortcuts')"
+        @click="$emit('toggleShortcuts')"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <rect x="5" y="4" width="14" height="16" rx="2" />
