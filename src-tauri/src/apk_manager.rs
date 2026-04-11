@@ -5,6 +5,7 @@ use tokio::process::Command;
 
 use crate::error::DokkyError;
 use crate::paths::BundledPaths;
+use crate::process_ext::NoWindow;
 
 const DOFUS_PACKAGE: &str = "com.ankama.dofustouch";
 
@@ -22,6 +23,7 @@ pub struct CloneInfo {
 pub async fn list_dofus_clones(paths: &BundledPaths, serial: &str) -> Result<Vec<CloneInfo>, DokkyError> {
     let output = Command::new(&paths.adb)
         .args(["-s", serial, "shell", "pm", "list", "packages"])
+        .no_window()
         .output()
         .await
         .map_err(|_| DokkyError::AdbNotFound)?;
@@ -446,6 +448,7 @@ fn which_sync(name: &str) -> Option<PathBuf> {
 async fn get_all_apk_paths(adb: &Path, serial: &str, package: &str) -> Result<Vec<String>, DokkyError> {
     let output = Command::new(adb)
         .args(["-s", serial, "shell", "pm", "path", package])
+        .no_window()
         .output()
         .await
         .map_err(|_| DokkyError::AdbNotFound)?;
@@ -476,6 +479,7 @@ async fn run_adb(adb: &Path, serial: &str, args: &[&str]) -> Result<String, Dokk
 
     let output = Command::new(adb)
         .args(&cmd_args)
+        .no_window()
         .output()
         .await
         .map_err(|_| DokkyError::AdbNotFound)?;
@@ -495,6 +499,7 @@ async fn run_java_jar(java: &Path, jar: &Path, args: &[&str]) -> Result<String, 
 
     let output = Command::new(java)
         .args(&cmd_args)
+        .no_window()
         .output()
         .await
         .map_err(|e| format!("java -jar {}: {}", jar.display(), e))?;
@@ -529,6 +534,7 @@ fn get_or_create_keystore(paths: &BundledPaths) -> Result<PathBuf, DokkyError> {
                 "-keypass", "dokky123",
                 "-dname", "CN=Dokky,OU=Dokky,O=Dokky,L=Unknown,ST=Unknown,C=XX",
             ])
+            .no_window()
             .output()
             .map_err(|e| DokkyError::ApkCloneFailed(format!("keytool: {}", e)))?;
 
@@ -624,6 +630,7 @@ fn tint_icons(decompiled_dir: &Path, color_hex: &str) {
 async fn zipalign(paths: &BundledPaths, input: &Path, output: &Path) -> Result<(), DokkyError> {
     let result = Command::new(&paths.zipalign)
         .args(["-p", "-f", "4", input.to_str().unwrap(), output.to_str().unwrap()])
+        .no_window()
         .output()
         .await;
 
@@ -673,6 +680,7 @@ async fn sign_apk(paths: &BundledPaths, apk: &Path, keystore: &Path) -> Result<(
             apk.to_str().unwrap(),
             "dokky",
         ])
+        .no_window()
         .output()
         .await
         .map_err(|e| DokkyError::ApkCloneFailed(format!("jarsigner: {}", e)))?;

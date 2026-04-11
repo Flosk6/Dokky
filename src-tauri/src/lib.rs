@@ -4,6 +4,7 @@ mod device_manager;
 mod error;
 mod license_manager;
 mod paths;
+mod process_ext;
 mod scrcpy_server;
 mod session_manager;
 
@@ -13,6 +14,7 @@ use tauri::Manager;
 
 use error::DokkyError;
 use paths::BundledPaths;
+use process_ext::NoWindow;
 use session_manager::SessionStore;
 
 #[tauri::command]
@@ -98,6 +100,7 @@ async fn is_keyboard_visible(
     // Use grep on device side to minimize data transfer and speed up the check
     let output = tokio::process::Command::new(&paths.adb)
         .args(["-s", &device_serial, "shell", "dumpsys input_method | grep 'mServedInputConnection='"])
+        .no_window()
         .output()
         .await
         .map_err(|_| DokkyError::AdbNotFound)?;
@@ -120,6 +123,7 @@ async fn set_device_animations(
     for setting in &["window_animation_scale", "transition_animation_scale", "animator_duration_scale"] {
         let output = tokio::process::Command::new(&paths.adb)
             .args(["-s", &device_serial, "shell", "settings", "put", "global", setting, val])
+            .no_window()
             .output()
             .await
             .map_err(|_| DokkyError::AdbNotFound)?;
@@ -143,15 +147,18 @@ async fn set_device_screen_dim(
         // Switch to manual brightness and set to 0
         tokio::process::Command::new(&paths.adb)
             .args(["-s", &device_serial, "shell", "settings", "put", "system", "screen_brightness_mode", "0"])
+            .no_window()
             .output().await.map_err(|_| DokkyError::AdbNotFound)?;
         tokio::process::Command::new(&paths.adb)
             .args(["-s", &device_serial, "shell", "settings", "put", "system", "screen_brightness", "0"])
+            .no_window()
             .output().await.map_err(|_| DokkyError::AdbNotFound)?;
         log::info!("[adb] Screen dimmed to minimum on {}", device_serial);
     } else {
         // Restore auto brightness
         tokio::process::Command::new(&paths.adb)
             .args(["-s", &device_serial, "shell", "settings", "put", "system", "screen_brightness_mode", "1"])
+            .no_window()
             .output().await.map_err(|_| DokkyError::AdbNotFound)?;
         log::info!("[adb] Screen brightness restored to auto on {}", device_serial);
     }
@@ -312,9 +319,12 @@ pub fn run() {
         .plugin(
             tauri_plugin_log::Builder::default()
                 .level(log::LevelFilter::Debug)
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::Stdout,
-                ))
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("dokky".into()),
+                    }),
+                ])
                 .build(),
         )
         .setup(|app| {

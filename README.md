@@ -101,12 +101,15 @@ Prix : 1,99€/mois ou 19,99€/an
 ## Développement
 
 ```bash
-# Pré-requis : Node.js 22+, Rust 1.77+, adb, scrcpy
+# Pré-requis : Node.js 22+, Rust 1.77+, JDK 21 (pour jlink)
+# macOS : Homebrew (scrcpy, apktool), Android SDK via Studio
+# Windows : Git Bash + Android SDK via Studio (pour apksigner/zipalign)
 
 # Installer les dépendances
 npm install
 
-# Collecter les deps externes (adb, scrcpy-server, apktool, JRE)
+# Collecter les deps externes (adb, scrcpy-server, apktool, JRE minimal)
+# Auto-détecte macOS / Windows (Git Bash). Downloads sur Windows, Homebrew sur macOS.
 bash scripts/collect-deps.sh
 
 # Lancer en mode dev
@@ -115,6 +118,10 @@ cargo tauri dev
 # Build production
 cargo tauri build
 ```
+
+Les logs runtime sont écrits sur fichier :
+- macOS : `~/Library/Logs/com.dokky.app/dokky.log`
+- Windows : `%LOCALAPPDATA%\com.dokky.app\logs\dokky.log`
 
 ## Stack
 

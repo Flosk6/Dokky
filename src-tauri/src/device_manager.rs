@@ -4,6 +4,7 @@ use serde::Serialize;
 use tokio::process::Command;
 
 use crate::error::DokkyError;
+use crate::process_ext::NoWindow;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Device {
@@ -16,6 +17,7 @@ pub struct Device {
 pub async fn list_devices(adb: &Path) -> Result<Vec<Device>, DokkyError> {
     let output = Command::new(adb)
         .args(["devices", "-l"])
+        .no_window()
         .output()
         .await
         .map_err(|_| DokkyError::AdbNotFound)?;
@@ -68,6 +70,7 @@ fn parse_adb_output(output: &str) -> Vec<Device> {
 pub async fn list_packages(adb: &Path, serial: &str, filter: &str) -> Result<Vec<String>, DokkyError> {
     let output = Command::new(adb)
         .args(["-s", serial, "shell", "pm", "list", "packages"])
+        .no_window()
         .output()
         .await
         .map_err(|_| DokkyError::AdbNotFound)?;

@@ -32,11 +32,21 @@ cd src-tauri && cargo check
 cd src-tauri && cargo test
 
 # Collect bundled dependencies (run before production build)
-bash scripts/collect-deps.sh
+# Auto-detects macOS or Windows (Git Bash). Pass platform explicitly if needed.
+bash scripts/collect-deps.sh            # auto-detect
+bash scripts/collect-deps.sh windows    # force Windows branch
 
-# Production build (.app + .dmg on macOS)
+# Production build (.app + .dmg on macOS, .exe/.msi on Windows)
 cargo tauri build
 ```
+
+### Windows dev prerequisites
+
+- **JDK 21** in PATH (for `jlink` — used to build the minimal bundled JRE).
+- **Android SDK** for `apksigner.jar` and `zipalign.exe`: install Android Studio or set `ANDROID_HOME`.
+- **Git Bash** (ships with Git for Windows) to run `scripts/collect-deps.sh`.
+- `adb.exe`, `scrcpy-server.jar`, `apktool.jar` are downloaded by the script automatically (same URLs as the CI workflow).
+- Logs are written to `%LOCALAPPDATA%\com.dokky.app\logs\dokky.log` (via `tauri-plugin-log`).
 
 ## Architecture
 

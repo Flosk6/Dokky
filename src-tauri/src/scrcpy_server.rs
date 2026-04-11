@@ -10,6 +10,7 @@ use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 use crate::error::DokkyError;
+use crate::process_ext::NoWindow;
 
 const SCRCPY_VERSION: &str = "3.3.4";
 const DEVICE_NAME_LEN: usize = 64;
@@ -68,6 +69,7 @@ pub async fn connect(
         .args(["-s", device_serial, "push",
             server_jar.to_str().unwrap(),
             "/data/local/tmp/scrcpy-server.jar"])
+        .no_window()
         .output().await
         .map_err(|_| DokkyError::AdbNotFound)?;
 
@@ -90,6 +92,7 @@ pub async fn connect(
         .args(["-s", device_serial, "reverse",
             &format!("localabstract:scrcpy_{:08x}", scid),
             &format!("tcp:{}", local_port)])
+        .no_window()
         .output().await
         .map_err(|_| DokkyError::AdbNotFound)?;
 
@@ -132,6 +135,7 @@ pub async fn connect(
         .kill_on_drop(true)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
+        .no_window()
         .spawn()
         .map_err(|e| DokkyError::ScrcpyLaunchFailed(e.to_string()))?;
 
@@ -341,5 +345,6 @@ pub async fn remove_reverse(adb: &Path, device_serial: &str, scid: u32) {
     let _ = Command::new(adb)
         .args(["-s", device_serial, "reverse", "--remove",
             &format!("localabstract:scrcpy_{:08x}", scid)])
+        .no_window()
         .output().await;
 }
