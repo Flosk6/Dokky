@@ -19,13 +19,13 @@ impl BundledPaths {
     /// Resolve all tool paths. In production, look inside the app bundle's resources.
     /// In dev mode, fall back to system PATH.
     pub fn resolve(app: &AppHandle) -> Self {
-        let adb = resolve_binary(app, "adb");
-        let zipalign = resolve_binary(app, "zipalign");
-        let java = resolve_jre_binary(app, "java");
-        let keytool = resolve_jre_binary(app, "keytool");
-        let scrcpy_server = resolve_resource(app, "scrcpy-server.jar");
-        let apktool_jar = resolve_resource(app, "apktool.jar");
-        let apksigner_jar = resolve_resource(app, "apksigner.jar");
+        let adb = strip_unc_prefix(resolve_binary(app, "adb"));
+        let zipalign = strip_unc_prefix(resolve_binary(app, "zipalign"));
+        let java = strip_unc_prefix(resolve_jre_binary(app, "java"));
+        let keytool = strip_unc_prefix(resolve_jre_binary(app, "keytool"));
+        let scrcpy_server = strip_unc_prefix(resolve_resource(app, "scrcpy-server.jar"));
+        let apktool_jar = strip_unc_prefix(resolve_resource(app, "apktool.jar"));
+        let apksigner_jar = strip_unc_prefix(resolve_resource(app, "apksigner.jar"));
 
         log::info!("[paths] adb: {:?}", adb);
         log::info!("[paths] scrcpy-server: {:?}", scrcpy_server);
@@ -247,4 +247,16 @@ fn find_jar(name: &str) -> PathBuf {
     }
 
     PathBuf::from(format!("{}.jar", name))
+}
+
+/// Strip the Windows `\\?\` extended-length path prefix.
+/// Java and some other tools don't handle this prefix.
+/// Tauri's resource resolver adds it on Windows production builds.
+fn strip_unc_prefix(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    if s.starts_with("\\\\?\\") {
+        PathBuf::from(&s[4..])
+    } else {
+        p
+    }
 }

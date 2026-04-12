@@ -443,7 +443,17 @@ fn which_sync(name: &str) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| {
         std::env::split_paths(&paths).find_map(|dir| {
             let full = dir.join(name);
-            if full.exists() { Some(full) } else { None }
+            if full.exists() {
+                return Some(full);
+            }
+            // On Windows, also try with .exe extension
+            if cfg!(windows) {
+                let with_exe = dir.join(format!("{}.exe", name));
+                if with_exe.exists() {
+                    return Some(with_exe);
+                }
+            }
+            None
         })
     })
 }
