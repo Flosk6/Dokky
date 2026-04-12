@@ -53,7 +53,7 @@ jobs:
       - name: Build minimal JRE (jlink)
         shell: bash
         run: |
-          MODULES="java.base,java.desktop,java.logging,jdk.crypto.ec,java.security.jgss,java.naming"
+          MODULES="java.base,java.desktop,java.logging,java.xml,jdk.crypto.ec,java.security.jgss,java.naming"
           jlink \
             --add-modules "$MODULES" \
             --output src-tauri/resources/jre \

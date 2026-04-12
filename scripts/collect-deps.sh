@@ -218,7 +218,7 @@ if [ -d "$JRE_DIR/bin" ] && [ -f "$JRE_DIR/bin/$JAVA_BIN" ]; then
 else
     JLINK=$(which jlink 2>/dev/null || true)
     if [ -n "$JLINK" ]; then
-        MODULES="java.base,java.desktop,java.logging,jdk.crypto.ec,java.security.jgss,java.naming"
+        MODULES="java.base,java.desktop,java.logging,java.xml,jdk.crypto.ec,java.security.jgss,java.naming"
         rm -rf "$JRE_DIR"
         "$JLINK" \
             --add-modules "$MODULES" \

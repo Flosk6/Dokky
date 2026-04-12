@@ -361,6 +361,13 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 let store = app.state::<SessionStore>();
                 session_manager::kill_all(&store);
+                // Kill the adb daemon so it doesn't lock DLLs (blocks reinstall on Windows)
+                let paths = app.state::<BundledPaths>();
+                let mut cmd = std::process::Command::new(&paths.adb);
+                cmd.args(["kill-server"]);
+                process_ext::NoWindow::no_window(&mut cmd);
+                let _ = cmd.output();
+                log::info!("[adb] kill-server on exit");
             }
         });
 }
