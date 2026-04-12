@@ -514,8 +514,9 @@ async fn run_adb(adb: &Path, serial: &str, args: &[&str]) -> Result<String, Dokk
 }
 
 /// Run a Java JAR with arguments (used for apktool, apksigner).
+/// JVM heap is capped at 256MB and uses Serial GC to minimize virtual memory footprint.
 async fn run_java_jar(java: &Path, jar: &Path, args: &[&str]) -> Result<String, String> {
-    let mut cmd_args = vec!["-jar", jar.to_str().unwrap()];
+    let mut cmd_args = vec!["-Xmx256m", "-XX:+UseSerialGC", "-jar", jar.to_str().unwrap()];
     cmd_args.extend_from_slice(args);
 
     let output = Command::new(java)
