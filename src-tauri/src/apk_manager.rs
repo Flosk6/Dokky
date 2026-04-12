@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::Serialize;
 use tokio::process::Command;
@@ -47,22 +48,29 @@ pub async fn list_dofus_clones(paths: &BundledPaths, serial: &str) -> Result<Vec
         })
         .collect();
 
-    // Resolve app names + icons in parallel (one pull+decompile per clone)
+    // Resolve app names + icons with limited concurrency. Each clone resolution
+    // launches a JVM (~150MB) for apktool — too many in parallel exhausts
+    // Windows virtual memory. Cap at 2 concurrent JVMs.
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(2));
     let mut tasks = Vec::new();
     for pkg in packages {
         let p = pkg.clone();
         let task_paths = paths.clone();
         let serial_owned = serial.to_string();
+        let sem = semaphore.clone();
         tasks.push(tokio::spawn(async move {
-            let (name, icon) = read_app_info_from_device(&task_paths, &serial_owned, &p).await.unwrap_or_else(|_| {
-                let fallback = if p == DOFUS_PACKAGE {
-                    "Dofus Touch (original)".to_string()
-                } else {
-                    let suffix = p.strip_prefix(DOFUS_PACKAGE).unwrap_or("");
-                    format!("Dofus Touch {}", suffix)
-                };
-                (fallback, None)
-            });
+            let _permit = sem.acquire().await.unwrap();
+            let (name, icon) = read_app_info_from_device(&task_paths, &serial_owned, &p)
+                .await
+                .unwrap_or_else(|_| {
+                    let fallback = if p == DOFUS_PACKAGE {
+                        "Dofus Touch (original)".to_string()
+                    } else {
+                        let suffix = p.strip_prefix(DOFUS_PACKAGE).unwrap_or("");
+                        format!("Dofus Touch {}", suffix)
+                    };
+                    (fallback, None)
+                });
             CloneInfo { package: p, display_name: name, icon }
         }));
     }
