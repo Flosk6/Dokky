@@ -75,10 +75,9 @@ jobs:
         run: |
           mkdir -p src-tauri/resources
           SCRCPY_VERSION="3.3.4"
-          # scrcpy-server is built from the official scrcpy repo releases
-          curl -L "https://github.com/nickel-fang/scrcpy-server/releases/download/v${SCRCPY_VERSION}/scrcpy-server" \
-            -o src-tauri/resources/scrcpy-server.jar && echo "Downloaded scrcpy-server" || \
-          echo "WARNING: Auto-download failed. Place scrcpy-server manually in src-tauri/resources/scrcpy-server.jar"
+          curl -fL "https://github.com/Genymobile/scrcpy/releases/download/v${SCRCPY_VERSION}/scrcpy-server-v${SCRCPY_VERSION}" \
+            -o src-tauri/resources/scrcpy-server.jar && echo "Downloaded scrcpy-server v${SCRCPY_VERSION}" || \
+          { echo "ERROR: scrcpy-server download failed"; exit 1; }
 
       - name: Collect adb (macOS)
         if: runner.os == 'macOS'
@@ -105,11 +104,9 @@ jobs:
         shell: bash
         run: |
           APKTOOL_VERSION="2.11.1"
-          curl -L "https://github.com/nickel-fang/apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar" \
-            -o src-tauri/resources/apktool.jar && echo "Downloaded apktool" || \
-          curl -L "https://bitbucket.org/nickel_fang/apktool/downloads/apktool_${APKTOOL_VERSION}.jar" \
-            -o src-tauri/resources/apktool.jar && echo "Downloaded apktool (fallback)" || \
-          echo "WARNING: Auto-download failed. Place apktool.jar manually in src-tauri/resources/"
+          curl -fL "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar" \
+            -o src-tauri/resources/apktool.jar && echo "Downloaded apktool v${APKTOOL_VERSION}" || \
+          { echo "ERROR: apktool download failed"; exit 1; }
 
       - name: Setup Android SDK (for apksigner + zipalign)
         uses: android-actions/setup-android@v3
@@ -140,6 +137,13 @@ jobs:
           ls -lh src-tauri/resources/ 2>/dev/null || true
           ls -lh src-tauri/resources/bin/ 2>/dev/null || true
           ls -lh src-tauri/resources/jre/bin/ 2>/dev/null || true
+          # Sanity check: scrcpy-server must be >50KB (a 9-byte file means a failed download)
+          MIN_SIZE=50000
+          ACTUAL=$(wc -c < src-tauri/resources/scrcpy-server.jar)
+          if [ "$ACTUAL" -lt "$MIN_SIZE" ]; then
+            echo "ERROR: scrcpy-server.jar is only ${ACTUAL} bytes (expected >50KB). Download likely failed."
+            exit 1
+          fi
 
       # --- Build ---
 
