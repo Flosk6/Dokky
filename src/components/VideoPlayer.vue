@@ -163,9 +163,6 @@ function configureDecoder(annexBConfig: Uint8Array) {
 
 // --- Start video stream (poll-based, raw binary) ---
 let streaming = true;
-// Track active state — inactive tabs decode but skip canvas rendering
-let isActive = props.active !== false;
-watch(() => props.active, (val) => { isActive = val !== false; });
 
 async function startStreaming() {
   setupDecoder();
@@ -173,16 +170,14 @@ async function startStreaming() {
   let packetCount = 0;
   let pendingFrame: VideoFrame | null = null;
 
-  // rAF loop: only draw when active, but always consume decoded frames
+  // rAF loop: always draw to keep canvas up-to-date (even for hidden tabs)
   function drawLoop() {
     if (!streaming) return;
     if (pendingFrame) {
-      if (isActive) {
-        const canvas = canvasRef.value;
-        const ctx = canvas?.getContext("2d");
-        if (ctx && canvas) {
-          ctx.drawImage(pendingFrame, 0, 0, canvas.width, canvas.height);
-        }
+      const canvas = canvasRef.value;
+      const ctx = canvas?.getContext("2d");
+      if (ctx && canvas) {
+        ctx.drawImage(pendingFrame, 0, 0, canvas.width, canvas.height);
       }
       pendingFrame.close();
       pendingFrame = null;
