@@ -105,24 +105,27 @@ async fn read_app_info_from_device(
             })
             .ok();
 
-        // Decompile for app name
+        // Decompile for app name (non-fatal: fall back to package name if apktool fails)
+        let mut name = package.to_string();
         let dec = work_dir.join("dec");
-        run_java_jar(&paths.java, &paths.apktool_jar, &[
+        let decompile_ok = run_java_jar(&paths.java, &paths.apktool_jar, &[
             "d", local.to_str().unwrap(),
             "-o", dec.to_str().unwrap(),
             "-f", "--no-src",
         ])
-        .await
-        .map_err(|e| DokkyError::ApkCloneFailed(e))?;
+        .await;
 
-        let mut name = package.to_string();
-        let strings_path = dec.join("res/values/strings.xml");
-        if let Ok(content) = std::fs::read_to_string(&strings_path) {
-            for line in content.lines() {
-                if line.contains("name=\"app_name\"") {
-                    if let Some(start) = line.find('>') {
-                        if let Some(end) = line[start + 1..].find('<') {
-                            name = line[start + 1..start + 1 + end].to_string();
+        if let Err(e) = &decompile_ok {
+            log::warn!("[apk] apktool decompile failed for {}: {}", package, e);
+        } else {
+            let strings_path = dec.join("res/values/strings.xml");
+            if let Ok(content) = std::fs::read_to_string(&strings_path) {
+                for line in content.lines() {
+                    if line.contains("name=\"app_name\"") {
+                        if let Some(start) = line.find('>') {
+                            if let Some(end) = line[start + 1..].find('<') {
+                                name = line[start + 1..start + 1 + end].to_string();
+                            }
                         }
                     }
                 }
