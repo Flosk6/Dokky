@@ -1,6 +1,6 @@
 [package]
 name = "dokky"
-version = "0.1.0"
+version = "0.1.2"
 description = "Multi-Instance Android Desktop App via scrcpy"
 authors = ["florian"]
 edition = "2021"
